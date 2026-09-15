@@ -1,0 +1,20 @@
+{
+  "name": "orchestrail",
+  "interface": {
+    "displayName": "Orchestrail"
+  },
+  "plugins": [
+    {
+      "name": "orchestrail",
+      "source": {
+        "source": "local",
+        "path": "./plugins/orchestrail"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

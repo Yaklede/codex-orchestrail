@@ -1,0 +1,21 @@
+name: GitHub release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: node -e 'const p=require("./package.json");if(process.env.GITHUB_REF_NAME!==`v${p.version}`)process.exit(1)'
+      - run: pnpm package
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

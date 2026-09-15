@@ -1,0 +1,21 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+
+const version = JSON.parse(await fs.readFile('package.json', 'utf8')).version;
+const stage = path.resolve('dist/github');
+await fs.rm(stage, { recursive: true, force: true });
+await fs.mkdir(path.join(stage, '.agents/plugins'), { recursive: true });
+await fs.cp('plugins', path.join(stage, 'plugins'), { recursive: true });
+await fs.copyFile('.agents/plugins/marketplace.json', path.join(stage, '.agents/plugins/marketplace.json'));
+for (const file of ['README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CONTRIBUTING.md']) await fs.copyFile(file, path.join(stage, file));
+await fs.cp('docs', path.join(stage, 'docs'), { recursive: true });
+await fs.mkdir(path.join(stage, 'opendock'), { recursive: true });
+await fs.copyFile('opendock/DOCK.md', path.join(stage, 'opendock/DOCK.md'));
+execFileSync(process.execPath, ['scripts/prepare-opendock.mjs'], { stdio: 'inherit' });
+const artifacts = [`orchestrail-${version}.tar.gz`, `orchestrail-opendock-${version}.tar.gz`];
+for (const [i, name] of artifacts.entries()) execFileSync('tar', ['-czf', path.resolve('dist', name), '-C', i === 0 ? stage : path.resolve('dist/opendock'), '.']);
+const checksums = await Promise.all(artifacts.map(async name => `${createHash('sha256').update(await fs.readFile(path.join('dist', name))).digest('hex')}  ${name}`));
+await fs.writeFile('dist/SHA256SUMS', checksums.join('\n') + '\n');
+console.log(artifacts.map(name => path.resolve('dist', name)).join('\n'));

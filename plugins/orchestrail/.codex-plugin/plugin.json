@@ -1,0 +1,22 @@
+{
+  "name": "orchestrail",
+  "version": "0.1.0",
+  "description": "One Codex conversation. Sol executes; Astra resolves difficult decisions. Durable plans, evidence, and resumable work.",
+  "author": {
+    "name": "Yaklede",
+    "url": "https://github.com/Yaklede"
+  },
+  "repository": "https://github.com/Yaklede/codex-orchestrail",
+  "homepage": "https://github.com/Yaklede/codex-orchestrail#readme",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Orchestrail",
+    "shortDescription": "Route coding work to Sol and hard decisions to Astra.",
+    "longDescription": "Work in your existing Codex conversation with role-based model selection, versioned plans, verification evidence, bounded expert assignments, and resumable project state.",
+    "developerName": "Yaklede",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["Set up Orchestrail in this project.", "Use Orchestrail to implement and verify this task.", "Show my Orchestrail progress."]
+  }
+}
