@@ -1,3 +1,5 @@
+> 0.3.0 변경: 직접 실행 기본, 판단 후 선택적 위임, compact status, control revision, begin/finish를 구현했습니다. 아래 초기 계획의 Sol 메인 권장은 대체되었습니다. 현재 동작은 [구조 문서](architecture.md)를 따릅니다.
+
 # Orchestrail 구현 계획
 
 - 작성일: 2026-09-15

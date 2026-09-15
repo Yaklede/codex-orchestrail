@@ -1,7 +1,11 @@
 import { z } from 'zod';
-import { AttemptInput, Criterion, DecisionInput, EvidenceInput, HarnessError, Plan, Result, Role, RouteInput, ensure, id, type Assignment, type Config, type Run, type State } from './contracts.js';
+import { AttemptInput, Criterion, DecisionInput, EvidenceInput, HarnessError, Plan, Result, Role, RouteInput, ensure, id, type Assignment, type Config, type Evidence, type Run, type State } from './contracts.js';
 import { exec, fingerprint, hash, now, redact, uid } from './files.js';
-import { Store } from './store.js';
+import { Store, controlRevision } from './store.js';
+
+const StartInput = z.object({ goal: z.string().min(1).max(16000), constraints: z.array(z.string()).default([]), criteria: z.array(Criterion).min(1) }).strict();
+const AssignmentInput = z.object({ role: Role, objective: z.string().min(1).max(16000), stepId: id.optional() }).strict();
+const CheckInput = z.object({ criterionId: id, argv: z.array(z.string()).min(1).max(100), description: z.string().min(1).max(4000), timeoutMs: z.number().int().min(100).max(300000).default(120000) }).strict();
 
 export const currentPlan = (run: Run) => run.plans.at(-1);
 export const version = (run: Run) => currentPlan(run)?.version ?? 0;
@@ -64,7 +68,7 @@ export function chooseRoute(run: Run, raw: unknown, config: Config) {
 }
 export function reserve(run: Run, state: State, config: Config, raw: unknown): Assignment {
   active(run);
-  const input = z.object({ role: Role, objective: z.string().min(1).max(16000), stepId: id.optional() }).strict().parse(raw);
+  const input = AssignmentInput.parse(raw);
   const route = run.route;
   if (input.role !== 'scout') {
     ensure(route?.taskRevision === run.taskRevision, 'ROUTE_REQUIRED', 'Classify this task revision before assigning work.');
@@ -110,17 +114,39 @@ export function completion(run: Run, codeHash: string) {
   return { ready: missing.length === 0 && currentPlan(run)?.taskRevision === run.taskRevision && !routePending && !run.assignments.some(inFlight) && run.status === 'active', missing: missing.map(c => c.id), routePending, activeAssignments: run.assignments.filter(inFlight).map(a => a.id) };
 }
 
-export async function execute(store: Store, action: string, raw: Record<string, unknown>, sessionId?: string) {
-  const config = await store.config();
+function compactRun(run: Run) {
+  const plan = currentPlan(run);
+  return {
+    id: run.id, sessionId: run.sessionId, goal: run.goal, constraints: run.constraints,
+    status: run.status, taskRevision: run.taskRevision, pauseReason: run.pauseReason, resumeChanges: run.resumeChanges,
+    plan,
+    route: run.route && { role: run.route.role, reasons: run.route.reasons, taskRevision: run.route.taskRevision },
+    criteria: run.criteria.map(c => {
+      const e = run.evidence.findLast(e => e.criterionId === c.id && e.planVersion === version(run) && e.taskRevision === run.taskRevision);
+      return { ...c, evidence: e && { id: e.id, passed: e.passed, codeHash: e.codeHash, source: e.source } };
+    }),
+    assignments: run.assignments.filter(inFlight),
+    latestResult: run.assignments.findLast(a => a.result && a.taskRevision === run.taskRevision)?.result,
+    latestDecision: run.decisions.at(-1) && { id: run.decisions.at(-1)!.id, outcome: run.decisions.at(-1)!.outcome, summary: run.decisions.at(-1)!.summary, planVersion: run.decisions.at(-1)!.planVersion },
+    history: { plans: run.plans.length, assignments: run.assignments.length, evidence: run.evidence.length, observations: run.observations?.length ?? 0 },
+  };
+}
+
+export async function execute(store: Store, action: string, raw: Record<string, unknown>, sessionId?: string): Promise<unknown> {
   const runId = raw.runId === undefined ? undefined : id.parse(raw.runId);
   const expectedRevision = raw.expectedRevision === undefined ? undefined : z.number().int().nonnegative().parse(raw.expectedRevision);
-  const { runId: _runId, expectedRevision: _revision, ...input } = raw;
+  const expectedControlRevision = raw.expectedControlRevision === undefined ? undefined : z.number().int().nonnegative().parse(raw.expectedControlRevision);
+  const { runId: _runId, expectedRevision: _revision, expectedControlRevision: _controlRevision, ...input } = raw;
   if (action === 'status') {
+    const request = z.object({ detail: z.boolean().default(false) }).strict().parse(input);
     const state = await store.load();
-    if (!runId && !sessionId) return { revision: state.revision, runs: Object.values(state.runs).map(r => ({ id: r.id, sessionId: r.sessionId, goal: r.goal, status: r.status, updatedAt: r.updatedAt })) };
+    const revisions = { revision: state.revision, controlRevision: controlRevision(state) };
+    if (!runId && !sessionId) return { ...revisions, runs: Object.values(state.runs).map(r => ({ id: r.id, sessionId: r.sessionId, goal: r.goal, status: r.status, updatedAt: r.updatedAt })) };
+    if (!runId && sessionId && !state.sessions[sessionId]?.runId) return { ...revisions, run: null, status: 'idle' };
     const run = getRun(state, sessionId, runId);
-    return { revision: state.revision, run, verification: completion(run, (await fingerprint(store.project)).hash), usage: usage(run), session: state.sessions[run.sessionId] };
+    return { ...revisions, run: request.detail ? run : compactRun(run), verification: completion(run, (await fingerprint(store.project)).hash), usage: request.detail ? usage(run) : compactUsage(run), session: state.sessions[run.sessionId], detailAvailable: true };
   }
+  const config = await store.config();
   if (action === 'fingerprint') return fingerprint(store.project);
   if (action === 'packet') {
     const run = getRun(await store.load(), sessionId, runId);
@@ -130,9 +156,33 @@ export async function execute(store: Store, action: string, raw: Record<string, 
     for (const e of packet.evidence) e.output = e.output.slice(0, Math.max(128, Math.floor(config.limits.packetChars / 10)));
     return { packet, truncated: full.length > JSON.stringify(packet, null, 2).length, chars: JSON.stringify(packet).length, targetChars: config.limits.packetChars, note: 'Referenced evidence remains in the state store. Goal, criteria and plan are never silently truncated.' };
   }
+  if (action === 'finish') {
+    const request = z.object({ checks: z.array(CheckInput).max(20).default([]) }).strict().parse(input);
+    const state = await store.load();
+    const run = getRun(state, sessionId, runId); active(run);
+    ensure(!run.assignments.some(inFlight), 'ASSIGNMENT_ACTIVE', 'Finish or interrupt native agents before final verification.');
+    ensure(expectedRevision === undefined || expectedRevision === state.revision, 'STALE_REVISION', 'State changed before verification.');
+    ensure(expectedControlRevision === undefined || expectedControlRevision === controlRevision(state), 'STALE_CONTROL_REVISION', 'Task state changed before verification.');
+    for (const check of request.checks) ensure(run.criteria.some(c => c.id === check.criterionId), 'UNKNOWN_CRITERION', `Unknown criterion: ${check.criterionId}`);
+    let revision = controlRevision(state);
+    const checks = [];
+    for (const check of request.checks) {
+      const e = await execute(store, 'verify', { ...check, runId: run.id, expectedControlRevision: revision }, sessionId) as Evidence & { controlRevision: number };
+      revision = e.controlRevision;
+      checks.push({ id: e.id, criterionId: e.criterionId, passed: e.passed, exitCode: e.exitCode, ...(e.passed ? {} : { output: e.output }) });
+      if (!e.passed) break;
+    }
+    const latest = getRun(await store.load(), sessionId, run.id);
+    const verification = completion(latest, (await fingerprint(store.project)).hash);
+    if (!verification.ready) return { runId: run.id, status: latest.status, completed: false, verification, checks, controlRevision: revision };
+    const result = await execute(store, 'complete', { runId: run.id, expectedControlRevision: revision }, sessionId) as Record<string, unknown>;
+    return { ...result, completed: true, checks };
+  }
   if (action === 'verify') {
-    const request = z.object({ criterionId: id, argv: z.array(z.string()).min(1).max(100), description: z.string().min(1).max(4000), timeoutMs: z.number().int().min(100).max(300000).default(120000) }).strict().parse(input);
+    const request = CheckInput.parse(input);
     const state = await store.load(); const run = getRun(state, sessionId, runId); active(run);
+    ensure(expectedRevision === undefined || expectedRevision === state.revision, 'STALE_REVISION', 'State changed before verification.');
+    ensure(expectedControlRevision === undefined || expectedControlRevision === controlRevision(state), 'STALE_CONTROL_REVISION', 'Task state changed before verification.');
     ensure(run.criteria.some(c => c.id === request.criterionId), 'UNKNOWN_CRITERION', 'Unknown criterion.');
     const before = await fingerprint(store.project);
     let exitCode: number | null = 0, output = '';
@@ -143,19 +193,30 @@ export async function execute(store: Store, action: string, raw: Record<string, 
       const target = getRun(s, sessionId, runId); active(target);
       ensure(target.taskRevision === run.taskRevision && version(target) === version(run), 'STALE_PLAN', 'Plan changed during verification; rerun the check.');
       const evidence = { id: uid('evidence'), criterionId: request.criterionId, description: request.description, kind: 'command' as const, command: JSON.stringify(request.argv), exitCode, passed: exitCode === 0 && before.hash === after.hash, output: redact(output).slice(-16000), codeHash: before.hash, source: 'runtime' as const, at: now(), planVersion: version(target), taskRevision: target.taskRevision };
-      target.evidence.push(evidence); touch(target); return { ...evidence, workspaceChangedDuringCheck: before.hash !== after.hash };
-    });
+      target.evidence.push(evidence); touch(target); return { ...evidence, workspaceChangedDuringCheck: before.hash !== after.hash, controlRevision: controlRevision(s) + 1 };
+    }, undefined, expectedControlRevision);
   }
-  const currentCode = ['start', 'evidence', 'complete', 'resume', 'revise'].includes(action) ? await fingerprint(store.project) : undefined;
+  const currentCode = ['start', 'begin', 'evidence', 'complete', 'resume', 'revise'].includes(action) ? await fingerprint(store.project) : undefined;
   return store.mutate(action, async state => {
-    if (action === 'start') {
-      const request = z.object({ goal: z.string().min(1).max(16000), constraints: z.array(z.string()).default([]), criteria: z.array(Criterion).min(1) }).strict().parse(input);
+    if (action === 'start' || action === 'begin') {
+      const begin = action === 'begin'
+        ? StartInput.extend({ route: RouteInput, plan: Plan.optional(), assignment: AssignmentInput.optional() }).parse(input)
+        : undefined;
+      const request = begin ?? StartInput.parse(input);
       ensure(new Set(request.criteria.map(c => c.id)).size === request.criteria.length, 'DUPLICATE_CRITERION', 'Criterion IDs must be unique.');
       const sid = id.parse(sessionId ?? uid('manual'));
       const previous = state.sessions[sid]?.runId;
       ensure(!previous || ['completed', 'cancelled'].includes(state.runs[previous]!.status), 'ACTIVE_RUN_EXISTS', 'Resume or cancel the existing run before starting another.');
-      const run: Run = { id: uid('run'), sessionId: sid, ...request, taskRevision: 1, status: 'active', createdAt: now(), updatedAt: now(), baseline: currentCode!, plans: [], assignments: [], evidence: [], decisions: [], attempts: [] };
+      const run: Run = { id: uid('run'), sessionId: sid, goal: request.goal, constraints: request.constraints, criteria: request.criteria, taskRevision: 1, status: 'active', createdAt: now(), updatedAt: now(), baseline: currentCode!, plans: [], assignments: [], evidence: [], decisions: [], attempts: [] };
       state.runs[run.id] = run; state.sessions[sid] = { ...state.sessions[sid], runId: run.id };
+      if (begin) {
+        const currentConfig = await store.config();
+        run.route = chooseRoute(run, begin.route, currentConfig);
+        if (!run.route.role) { run.status = 'waiting_for_input'; run.pauseReason = run.route.environmentBlocker; }
+        addPlan(run, begin.plan ?? { summary: run.goal, invariants: run.constraints, steps: [{ id: 'implement', objective: run.goal, criteria: run.criteria.map(c => c.id) }] });
+        const assignment = begin.assignment ? reserve(run, state, currentConfig, begin.assignment) : undefined;
+        return { runId: run.id, sessionId: sid, status: run.status, planVersion: version(run), controlRevision: controlRevision(state) + 1, assignment };
+      }
       return run;
     }
     if (action === 'resume') {
@@ -246,7 +307,16 @@ export async function execute(store: Store, action: string, raw: Record<string, 
       run.status = 'completed'; touch(run); return { runId: run.id, status: run.status, criteria: run.criteria.map(c => c.id), codeHash: currentCode!.hash, usage: usage(run) };
     }
     throw new HarnessError('UNKNOWN_ACTION', `Unknown action: ${action}`);
-  }, expectedRevision);
+  }, expectedRevision, expectedControlRevision);
+}
+function compactUsage(run: Run) {
+  const counts = new Map<string, { requested: string; actual: string | null; effort: string; assignments: number }>();
+  for (const a of run.assignments) {
+    const key = JSON.stringify([a.model, a.actualModel ?? null, a.effort]);
+    const group = counts.get(key) ?? { requested: a.model, actual: a.actualModel ?? null, effort: a.effort, assignments: 0 };
+    group.assignments++; counts.set(key, group);
+  }
+  return { assignments: run.assignments.length, expertAssignments: run.assignments.filter(a => a.role === 'expert').length, models: [...counts.values()], tokens: null, cost: null };
 }
 export function usage(run: Run) {
   return { assignments: run.assignments.length, expertAssignments: run.assignments.filter(a => a.role === 'expert').length, models: run.assignments.map(a => ({ assignmentId: a.id, requested: a.model, actual: a.actualModel ?? null, effort: a.effort })), tokens: null, cost: null, coverage: 'Assignments only; native model-internal requests and account billing are not measured.' };

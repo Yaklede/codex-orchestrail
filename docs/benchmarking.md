@@ -1,10 +1,39 @@
-# Token-efficiency pilot
+# Token-efficiency benchmarks
 
-This opt-in benchmark compares **Sol high**, **Astra high**, and **Orchestrail's balanced policy** (Sol medium root, Sol high Builder, Astra high only on a normal escalation). It uses the user's existing Codex authentication and consumes Codex allowance. It is excluded from CI. No API key or separate model runtime is used.
+This opt-in tool supports direct and explicitly delegated comparisons. The original pilot compared Sol high, Astra high and a Sol medium root with a Sol high Builder; that is historical evidence, not the current default policy. It uses the user's existing Codex authentication and consumes Codex allowance. It is excluded from CI. No API key or separate model runtime is used.
 
-Completed pilot: [2026-09-15 results](benchmark-results-2026-09-15.md), with [aggregate data](../benchmarks/results/2026-09-15-pilot.json).
+0.3.0 results: [direct execution and selective delegation](benchmark-results-2026-09-15-v03.md).
+
+Completed initial pilot: [2026-09-15 results](benchmark-results-2026-09-15.md), with [aggregate data](../benchmarks/results/2026-09-15-pilot.json).
 
 This measures three configured workflows, including their reasoning choices. It does not isolate the effect of orchestration from reasoning effort. The pilot explicitly exercises one Builder delegation while the parent reviews the specification; Orchestrail can choose direct root execution for small tasks in normal use. An expert is not forced into a routine task.
+
+## Version 0.3 comparisons
+
+| Mode | Main | Plugin workflow | Purpose |
+| --- | --- | --- | --- |
+| `astra` | Astra high | None, direct | Matched baseline |
+| `astra-direct` | Astra high | Default direct path, no tracked state or child | Measure skill/idle-hook overhead on the planner |
+| `astra-delegate` | Astra high | Main judgment, one Sol high Builder, begin/finish | Measure explicit selective delegation on the larger queue |
+| `sol` | Sol high | None | Optional model comparison |
+| `orchestrail` | Sol medium | Explicit Builder, granular protocol | Diagnostic legacy-style arm; use the historical commit to reproduce old code exactly |
+
+`--workload planner` is the default; `--workload queue` selects a larger immutable queue library with normalization, priority scheduling, retries, terminal transitions, reports and ownership requirements. The two arms of each comparison must use the same workload, fixture/evaluator hashes and model/effort. The queue's 61-test evaluator is fixed before either model run; it is a bounded contract check, not exhaustive assurance.
+
+The direct arm explicitly forbids delegation to isolate the overhead floor. The delegated arm explicitly requests one Builder; it measures that workflow, not the accuracy of automatic delegation selection. Neither establishes a general savings claim. The main skill is read from the isolated plugin path, not through a desktop picker; this includes the read cost but does not validate every host's discovery overhead. Metadata records the plugin runtime/skill hash as well as source HEAD because development runs may use uncommitted changes.
+
+Use separate opt-in invocations, checking current allowance between them:
+
+```bash
+node scripts/benchmark-pilot.mjs --run --mode astra-direct --workload planner \
+  --out dist/benchmarks/direct-check/plugin \
+  --stop-at-weekly-percent YOUR_THRESHOLD --weekly-resets-at CURRENT_RESET_TIMESTAMP
+node scripts/benchmark-pilot.mjs --run --mode astra-delegate --workload queue \
+  --out dist/benchmarks/queue-check/delegated \
+  --stop-at-weekly-percent YOUR_THRESHOLD --weekly-resets-at CURRENT_RESET_TIMESTAMP
+```
+
+Compare each with a separate `astra` run of the same workload. Inspect failures and final code before drawing conclusions. Do not start additional runs at the selected usage threshold.
 
 ## Fixture and evaluation
 
@@ -37,7 +66,7 @@ Every arm uses `workspace-write`, ignores user config, and supplies the same met
 - Child usage currently uses a **benchmark-only experimental adapter pinned to Codex CLI 0.154.0**. It reads only transcript paths supplied by this run's hooks and checks each transcript's session ID. It does not scan arbitrary user conversations.
 - The parent transcript's last cumulative usage must match the CLI event. For each observed child, use its last cumulative count exactly once; repeated token events are not additional consumption. Missing child stops, wrong versions, mismatched IDs or decreasing counters invalidate the total.
 - Sum distinct parent and child thread totals. `input_tokens + output_tokens` is the raw total. Cached input and reasoning output are subsets; do not add them again. Report uncached input, cached input and reasoning output separately.
-- Child coverage is checked against harness assignments. A failed or incomplete run remains in the results, with a null complete total if coverage cannot be established. Do not drop expensive failures from later comparisons.
+- Child coverage is checked against harness assignments. A failed or incomplete run remains in the results, with a null complete total if coverage cannot be established. Last available per-thread counts are separately retained as partial observations and must not be labeled final usage. Do not drop expensive failures from later comparisons.
 - This local audit does not provide service billing, exact subscription charging, or a stable token meter in the installed plugin. The plugin's normal `status` continues to return null token and cost fields.
 
 Official documentation provides [CLI JSON usage](https://learn.chatgpt.com/docs/non-interactive-mode), but explicitly says the [hook transcript format is not stable](https://learn.chatgpt.com/docs/hooks#common-input-fields). The version-pinned audit must be reviewed on a host upgrade. A future stable integration should use host-provided per-thread usage events where accessible rather than turn the transcript adapter into a core plugin dependency.

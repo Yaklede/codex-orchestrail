@@ -6,6 +6,18 @@ export function jsonLines(text) {
   return text.split('\n').filter(Boolean).map(line => JSON.parse(line));
 }
 
+export function transcriptLocations(hooks) {
+  const locations = new Map();
+  for (const event of hooks) {
+    // In CLI 0.154.0 SubagentStart.transcript_path belongs to the child,
+    // while SubagentStop.transcript_path belongs to the parent.
+    const owner = event.event === 'SubagentStart' ? event.agentId : event.sessionId;
+    if (owner && event.transcriptPath) locations.set(owner, event.transcriptPath);
+    if (event.agentId && event.agentTranscriptPath) locations.set(event.agentId, event.agentTranscriptPath);
+  }
+  return locations;
+}
+
 export function normalizeUsage(raw) {
   if (!raw || typeof raw !== 'object') throw new Error('Missing usage');
   const usage = {};

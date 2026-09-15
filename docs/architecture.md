@@ -1,6 +1,12 @@
 # Current architecture
 
-Orchestrail 0.2.0 runs inside the user's existing Codex conversation. Native Codex owns model execution and authorization. The bundled Node helper owns local records and validates transitions; it does not call an API, spawn models, or maintain a separate scheduler.
+Orchestrail 0.3.0 runs inside the user's existing Codex conversation. Native Codex owns model execution and authorization. The bundled Node helper owns local records and validates transitions; it does not call an API, spawn models, or maintain a separate scheduler.
+
+## Execution policy
+
+The current main model executes directly by default. Astra is the recommended comparison baseline from the initial pilot, not a enforced model setting. Small/coupled tasks need no setup, helper calls or stored run. Idle hooks emit no context. Existing active runs continue under their recorded constraints.
+
+Delegation is optional after the main agent resolves the consequential decisions and identifies substantial bounded implementation plus useful independent parent work. Setup preserves user-selected role settings. `begin` atomically starts, plans and optionally reserves an assignment. `finish` executes only requested remaining checks and reuses existing fresh evidence for the rest; its external checks are not an atomic transaction and are never blindly retried. Neither model price nor fewer assignments establishes equal-quality savings.
 
 ## Components
 
@@ -26,11 +32,13 @@ Assignments capture model and effort at reservation. Configuration changes leave
 
 ## State and invariants
 
-Each checkout has one `.orchestrail/events.jsonl`. Each committed line contains the complete resulting state, a monotonically increasing revision and a checksum. A snapshot is a convenience projection, never the source of truth. A partial trailing write can be discarded; corruption of a committed line fails visibly. A checkout lock serializes mutations, and `expectedRevision` can reject stale callers. Crash recovery never assumes an existing lock is stale while its PID is alive.
+Each checkout has one `.orchestrail/events.jsonl`. Each committed line contains the complete resulting state, a monotonically increasing revision and a checksum. A snapshot is a convenience projection, never the source of truth. A partial trailing write can be discarded; corruption of a committed line fails visibly. A checkout lock serializes mutations. `expectedControlRevision` rejects changes to task state, including plans, evidence, assignments, ownership and pauses. Receipts, session telemetry and tool observations only advance the journal `revision`; the legacy `expectedRevision` continues to check every event. Old v1 logs retain their checksums and use their last journal revision as the initial control revision. Crash recovery never assumes an existing lock is stale while its PID is alive.
 
 A native/manual session points to at most one selected run. A run stores task revisions, plans, assignments, decisions, evidence and failed attempts. Resume explicitly moves a run to a new session; directory sharing does not imply ownership. Native parent interruption pauses a run but retains live child assignments until the parent confirms those agents stopped.
 
 Plan versions validate criterion coverage and acyclic dependencies. One assignment per run and one builder per checkout simplify integration and event attribution. Assignment counts survive retries, reuse and resume. They are not token/billing accounting. The helper does not prevent root edits or other tools from bypassing these conventions.
+
+Default `status` exposes current constraints, the full current plan, active assignments, latest evidence/result/decision and grouped model counts. `detail:true` exposes full history for diagnostics. Historical tool output remains local and is not repeatedly sent to the model.
 
 ## Verification
 

@@ -15,12 +15,13 @@ const HELP = `Orchestrail ${VERSION} — state helper for the Codex plugin
 
 node <plugin>/scripts/orchestrail.mjs ACTION --project /path/to/repo [--session ID] [--input request.json]
 
-Actions: setup, config, configure, doctor, uninstall, start, status, route, plan, assign, bind,
+Actions: setup, config, configure, doctor, uninstall, begin, finish, start, status, route, plan, assign, bind,
          result, evidence, verify, attempt, decision, packet, fingerprint,
          complete, revise, pause, cancel, resume, recover-lock, hook
 
 Requests are JSON from --input or stdin. Hook input is the Codex event JSON.
-Include runId to select a run, and expectedRevision for optimistic writes.
+Include runId to select a run, and expectedControlRevision for task-state optimistic writes.
+Legacy expectedRevision checks all journal events. status is compact; {"detail":true} includes history.
 Models execute in Codex; this helper never calls a model or changes login settings.
 `;
 async function stdin() { let value = ''; for await (const chunk of process.stdin) { value += chunk; if (value.length > 4 * 1024 * 1024) throw new Error('Input exceeds 4 MiB.'); } return value; }

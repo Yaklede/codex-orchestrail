@@ -8,9 +8,29 @@ For first-run preference selection or later model/reasoning changes, use [the se
 node /resolved/plugin/scripts/orchestrail.mjs ACTION --project /project --session SESSION --input /project/.orchestrail/request.json
 ```
 
-Write the JSON request with a file tool. Avoid embedding user text in shell commands. All operations emit JSON; failures use stderr and exit 1. Hooks use the host's JSON output schema. `config`, `doctor`, `status`, and `fingerprint` need no request. First setup requires a user-selected preset or model/effort. `status` without a session lists runs; never assume the first run is the active one.
+Prefer JSON on stdin through a structured process API or safely quoted literal input; never interpolate untrusted text into shell code. `--input` files remain supported when useful. All operations emit JSON; failures use stderr and exit 1. Hooks use the host's JSON output schema. `config`, `doctor`, `status`, and `fingerprint` need no request. First setup requires a user-selected preset or model/effort. `status` without a session lists runs; never assume the first run is the active one.
 
-Most requests may include `runId` and `expectedRevision`. The latter rejects stale updates. Native IDs come from hooks or actual tool results, not invented identifiers. A manual session is supported when hooks are unavailable.
+Most requests may include `runId` and `expectedControlRevision`. The latter rejects task changes while ignoring diagnostic observations, receipt deduplication and session telemetry. `expectedRevision` retains its legacy all-journal-events behavior. Native IDs come from hooks or actual tool results, not invented identifiers. A manual session is supported when hooks are unavailable.
+
+## Preferred compact workflow
+
+Ordinary direct tasks need none of these calls. For managed delegation or explicit durable tracking, `begin` creates the run, route, plan and optional assignment atomically:
+
+```json
+{"goal":"Implement the decided retry policy","constraints":["Keep the API"],"criteria":[{"id":"AC-1","description":"Retry acceptance tests pass"}],"route":{"kind":"feature","reason":"Main agent resolved retry ordering and compatibility"},"assignment":{"role":"builder","objective":"Implement the resolved policy","stepId":"implement"}}
+```
+
+Omit `assignment` for tracked direct work. Omit `plan` to generate one step named `implement`, covering all criteria with the supplied constraints; include a normal plan for multiple steps. `route` is required and uses the same validation below. Invalid plans/reservations leave no partial run. Returned values are `runId`, `sessionId`, `planVersion`, `controlRevision`, and optional `assignment` with exact model/effort/taskName.
+
+After assignments finish, `finish` runs the remaining acceptance checks and completes only if every criterion has fresh passing evidence:
+
+```json
+{"checks":[{"criterionId":"AC-1","description":"Focused retry acceptance","argv":["pnpm","test","retry"],"timeoutMs":120000}]}
+```
+
+It stops at the first failure, retains evidence, and returns `completed:false` plus missing criteria/output. Passing output remains in detailed history. `checks:[]` (the default) reuses existing evidence without rerunning commands. Active assignments reject the operation before any check runs. This is a verification convenience, not an atomic transaction over external commands: never put deploy/migration operations here or blindly retry uncertain effects. Existing authorization and native execution permissions still apply.
+
+`status` returns current constraints, the full current plan, active assignments, latest result/decision, evidence status and grouped model counts. It excludes historical logs and full prior plans. Use `{"detail":true}` only when that history is needed. An untracked session returns `status:"idle",run:null` without requiring setup or creating state. Idle hooks return no context. Token and cost values remain unknown.
 
 ## Start and plan
 
@@ -120,4 +140,4 @@ First interrupt running agents through native tools and confirm they stopped. An
 
 Configuration: `.orchestrail/config.json`. The checksum-protected append log is `.orchestrail/events.jsonl`; `.orchestrail/snapshot.json` is its readable projection. Runs contain plans, decisions, evidence and assignments. These local files are Git-ignored by `.orchestrail/.gitignore`.
 
-Updates use a checkout-wide lock and increasing revision. Incomplete final log records are discarded on the next write; corrupt committed records are reported. If a writer crashed, `recover-lock` verifies its PID is gone before removing its lock. Run history is intentionally retained by uninstall.
+Updates use a checkout-wide lock and increasing journal revision, with a separate control revision for task changes. Existing v1 logs load unchanged; their last journal revision is the initial control revision until the next committed write records the new field. Incomplete final log records are discarded on the next write; corrupt committed records are reported. If a writer crashed, `recover-lock` verifies its PID is gone before removing its lock. Run history is intentionally retained by uninstall.

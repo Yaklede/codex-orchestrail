@@ -2,13 +2,13 @@
 
 ## New project
 
-Gather the goal, user flows, constraints and acceptance criteria. Use a bounded Sol scout when independent investigation is useful. Send the unresolved architecture to the expert, including concrete constraints and evidence. Require a versioned plan covering module boundaries, interfaces, invariants, implementation steps and checks. Return to Sol for the first working slice and subsequent steps. Extra requirements that materially change the design create a revised task/plan, not an undocumented implementation detour.
+Gather the goal, user flows, constraints and acceptance criteria. The main agent resolves architecture and implements directly when useful. Delegate a bounded scout or implementation only when the scope is substantial and useful independent work remains. A main Astra agent does not need a second Astra merely to discuss architecture. Use an expert only for a specific additional judgment the main agent needs. For tracked multi-stage work, keep a versioned plan covering module boundaries, interfaces, invariants and checks. Material requirement changes revise the tracked task/plan.
 
 ## Deployment
 
 A deployment request should identify the target/environment, code or image revision, established procedure, success checks and failure recovery. Investigate missing information from the repository and existing session before asking the user.
 
-Use Sol for a verified runbook when execution and recovery criteria are clear. Use an expert for unresolved questions such as old/new application compatibility, migration sequencing, backfills, traffic switching and rollback viability. The mere presence of production or multiple tools does not require expert escalation.
+The main agent can execute a verified runbook directly. Consider Sol delegation only when enough bounded work remains to justify the handoff. Resolve old/new application compatibility, migration sequencing, backfills, traffic switching and rollback viability in the main agent; use an expert for a specific unresolved judgment when needed. The mere presence of production or multiple tools does not require delegation.
 
 Separate the deployment action from its success evidence. Execute only within the user's existing authorization and Codex permissions, then run health/status checks through `verify`. A deploy process returning zero is insufficient when required health checks fail.
 

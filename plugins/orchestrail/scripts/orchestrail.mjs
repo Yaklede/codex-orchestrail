@@ -19766,6 +19766,7 @@ var AttemptInput = external_exports.object({
 var StateShape = external_exports.object({
   schemaVersion: external_exports.literal(1),
   revision: external_exports.number().int().nonnegative(),
+  controlRevision: external_exports.number().int().nonnegative().optional(),
   project: text,
   sessions: external_exports.record(external_exports.string(), external_exports.object({ runId: external_exports.string().optional(), observedModel: external_exports.string().optional(), lastHook: external_exports.string().optional(), hookAt: external_exports.string().optional() })),
   runs: external_exports.record(external_exports.string(), external_exports.unknown()),
@@ -19932,7 +19933,94 @@ function redact(value) {
   return value.replace(/\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{12,}/g, "[REDACTED]").replace(/(Bearer\s+)[\w.+\/-]{12,}/gi, "$1[REDACTED]").replace(/((?:token|password|secret|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]");
 }
 
+// packages/runtime/src/store.ts
+import fs2 from "node:fs/promises";
+import path2 from "node:path";
+function controlState(state) {
+  const { revision, controlRevision: controlRevision2, receipts, ...rest } = state;
+  return JSON.stringify({
+    ...rest,
+    sessions: Object.fromEntries(Object.entries(state.sessions).map(([key, session]) => {
+      const { observedModel, lastHook, hookAt, ...owned } = session;
+      return [key, owned];
+    })),
+    runs: Object.fromEntries(Object.entries(state.runs).map(([key, run]) => {
+      const { observations, ...owned } = run;
+      return [key, owned];
+    }))
+  });
+}
+var controlRevision = (state) => state.controlRevision ?? state.revision;
+var Store = class {
+  constructor(project) {
+    this.project = project;
+  }
+  project;
+  get dir() {
+    return path2.join(this.project, ".orchestrail");
+  }
+  async config() {
+    return Config.parse(await readJson(await safePath(this.project, ".orchestrail/config.json")));
+  }
+  async load() {
+    await safePath(this.project, ".orchestrail");
+    const file2 = path2.join(this.dir, "events.jsonl");
+    if (!await exists(file2)) return { schemaVersion: 1, revision: 0, project: this.project, sessions: {}, runs: {}, receipts: [] };
+    const raw = await fs2.readFile(file2, "utf8");
+    const lines = raw.split("\n");
+    lines.pop();
+    let result;
+    let revision = 0;
+    for (const line of lines) {
+      if (!line) continue;
+      const event = JSON.parse(line);
+      ensure(event.revision === revision + 1 && event.checksum === hash2(JSON.stringify(event.state)), "CORRUPT_LOG", "Event log checksum or revision mismatch.");
+      StateShape.parse(event.state);
+      result = event.state;
+      ensure(result.revision === event.revision, "CORRUPT_LOG", "State revision does not match event.");
+      revision = event.revision;
+    }
+    const state = result ?? { schemaVersion: 1, revision: 0, project: this.project, sessions: {}, runs: {}, receipts: [] };
+    ensure(state.project === this.project, "WORKSPACE_MOVED", "State belongs to another checkout. Start a new run in this checkout.");
+    return state;
+  }
+  async mutate(kind, update, expectedRevision, expectedControlRevision) {
+    await safePath(this.project, ".orchestrail");
+    return lock(this.dir, async () => {
+      const state = await this.load();
+      ensure(expectedRevision === void 0 || expectedRevision === state.revision, "STALE_REVISION", "State changed; reload status before updating.");
+      ensure(expectedControlRevision === void 0 || expectedControlRevision === controlRevision(state), "STALE_CONTROL_REVISION", "Task state changed; reload status before updating.");
+      const before = JSON.stringify(state);
+      const beforeControl = controlState(state);
+      const previousControlRevision = controlRevision(state);
+      const result = await update(state);
+      if (before === JSON.stringify(state)) return result;
+      state.controlRevision = previousControlRevision + Number(beforeControl !== controlState(state));
+      state.revision++;
+      const event = { id: uid("event"), at: now(), kind, revision: state.revision, checksum: hash2(JSON.stringify(state)), state };
+      const file2 = path2.join(this.dir, "events.jsonl");
+      if (await exists(file2)) {
+        const previous = await fs2.readFile(file2);
+        const committed = previous.lastIndexOf(10) + 1;
+        if (committed !== previous.length) await fs2.truncate(file2, committed);
+      }
+      const handle = await fs2.open(file2, "a", 384);
+      try {
+        await handle.writeFile(JSON.stringify(event) + "\n");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await writeJson(path2.join(this.dir, "snapshot.json"), state);
+      return result;
+    });
+  }
+};
+
 // packages/runtime/src/engine.ts
+var StartInput = external_exports.object({ goal: external_exports.string().min(1).max(16e3), constraints: external_exports.array(external_exports.string()).default([]), criteria: external_exports.array(Criterion).min(1) }).strict();
+var AssignmentInput = external_exports.object({ role: Role, objective: external_exports.string().min(1).max(16e3), stepId: id.optional() }).strict();
+var CheckInput = external_exports.object({ criterionId: id, argv: external_exports.array(external_exports.string()).min(1).max(100), description: external_exports.string().min(1).max(4e3), timeoutMs: external_exports.number().int().min(100).max(3e5).default(12e4) }).strict();
 var currentPlan = (run) => run.plans.at(-1);
 var version2 = (run) => currentPlan(run)?.version ?? 0;
 var inFlight = (a) => ["reserved", "running"].includes(a.status);
@@ -20005,7 +20093,7 @@ function chooseRoute(run, raw, config2) {
 }
 function reserve(run, state, config2, raw) {
   active(run);
-  const input2 = external_exports.object({ role: Role, objective: external_exports.string().min(1).max(16e3), stepId: id.optional() }).strict().parse(raw);
+  const input2 = AssignmentInput.parse(raw);
   const route = run.route;
   if (input2.role !== "scout") {
     ensure(route?.taskRevision === run.taskRevision, "ROUTE_REQUIRED", "Classify this task revision before assigning work.");
@@ -20054,17 +20142,44 @@ function completion(run, codeHash) {
   const routePending = !run.route || run.route.taskRevision !== run.taskRevision || run.route.role === "expert" || run.route.role === null;
   return { ready: missing.length === 0 && currentPlan(run)?.taskRevision === run.taskRevision && !routePending && !run.assignments.some(inFlight) && run.status === "active", missing: missing.map((c) => c.id), routePending, activeAssignments: run.assignments.filter(inFlight).map((a) => a.id) };
 }
+function compactRun(run) {
+  const plan = currentPlan(run);
+  return {
+    id: run.id,
+    sessionId: run.sessionId,
+    goal: run.goal,
+    constraints: run.constraints,
+    status: run.status,
+    taskRevision: run.taskRevision,
+    pauseReason: run.pauseReason,
+    resumeChanges: run.resumeChanges,
+    plan,
+    route: run.route && { role: run.route.role, reasons: run.route.reasons, taskRevision: run.route.taskRevision },
+    criteria: run.criteria.map((c) => {
+      const e = run.evidence.findLast((e2) => e2.criterionId === c.id && e2.planVersion === version2(run) && e2.taskRevision === run.taskRevision);
+      return { ...c, evidence: e && { id: e.id, passed: e.passed, codeHash: e.codeHash, source: e.source } };
+    }),
+    assignments: run.assignments.filter(inFlight),
+    latestResult: run.assignments.findLast((a) => a.result && a.taskRevision === run.taskRevision)?.result,
+    latestDecision: run.decisions.at(-1) && { id: run.decisions.at(-1).id, outcome: run.decisions.at(-1).outcome, summary: run.decisions.at(-1).summary, planVersion: run.decisions.at(-1).planVersion },
+    history: { plans: run.plans.length, assignments: run.assignments.length, evidence: run.evidence.length, observations: run.observations?.length ?? 0 }
+  };
+}
 async function execute(store, action, raw, sessionId) {
-  const config2 = await store.config();
   const runId = raw.runId === void 0 ? void 0 : id.parse(raw.runId);
   const expectedRevision = raw.expectedRevision === void 0 ? void 0 : external_exports.number().int().nonnegative().parse(raw.expectedRevision);
-  const { runId: _runId, expectedRevision: _revision, ...input2 } = raw;
+  const expectedControlRevision = raw.expectedControlRevision === void 0 ? void 0 : external_exports.number().int().nonnegative().parse(raw.expectedControlRevision);
+  const { runId: _runId, expectedRevision: _revision, expectedControlRevision: _controlRevision, ...input2 } = raw;
   if (action === "status") {
+    const request = external_exports.object({ detail: external_exports.boolean().default(false) }).strict().parse(input2);
     const state = await store.load();
-    if (!runId && !sessionId) return { revision: state.revision, runs: Object.values(state.runs).map((r) => ({ id: r.id, sessionId: r.sessionId, goal: r.goal, status: r.status, updatedAt: r.updatedAt })) };
+    const revisions = { revision: state.revision, controlRevision: controlRevision(state) };
+    if (!runId && !sessionId) return { ...revisions, runs: Object.values(state.runs).map((r) => ({ id: r.id, sessionId: r.sessionId, goal: r.goal, status: r.status, updatedAt: r.updatedAt })) };
+    if (!runId && sessionId && !state.sessions[sessionId]?.runId) return { ...revisions, run: null, status: "idle" };
     const run = getRun(state, sessionId, runId);
-    return { revision: state.revision, run, verification: completion(run, (await fingerprint(store.project)).hash), usage: usage(run), session: state.sessions[run.sessionId] };
+    return { ...revisions, run: request.detail ? run : compactRun(run), verification: completion(run, (await fingerprint(store.project)).hash), usage: request.detail ? usage(run) : compactUsage(run), session: state.sessions[run.sessionId], detailAvailable: true };
   }
+  const config2 = await store.config();
   if (action === "fingerprint") return fingerprint(store.project);
   if (action === "packet") {
     const run = getRun(await store.load(), sessionId, runId);
@@ -20073,11 +20188,36 @@ async function execute(store, action, raw, sessionId) {
     for (const e of packet.evidence) e.output = e.output.slice(0, Math.max(128, Math.floor(config2.limits.packetChars / 10)));
     return { packet, truncated: full.length > JSON.stringify(packet, null, 2).length, chars: JSON.stringify(packet).length, targetChars: config2.limits.packetChars, note: "Referenced evidence remains in the state store. Goal, criteria and plan are never silently truncated." };
   }
-  if (action === "verify") {
-    const request = external_exports.object({ criterionId: id, argv: external_exports.array(external_exports.string()).min(1).max(100), description: external_exports.string().min(1).max(4e3), timeoutMs: external_exports.number().int().min(100).max(3e5).default(12e4) }).strict().parse(input2);
+  if (action === "finish") {
+    const request = external_exports.object({ checks: external_exports.array(CheckInput).max(20).default([]) }).strict().parse(input2);
     const state = await store.load();
     const run = getRun(state, sessionId, runId);
     active(run);
+    ensure(!run.assignments.some(inFlight), "ASSIGNMENT_ACTIVE", "Finish or interrupt native agents before final verification.");
+    ensure(expectedRevision === void 0 || expectedRevision === state.revision, "STALE_REVISION", "State changed before verification.");
+    ensure(expectedControlRevision === void 0 || expectedControlRevision === controlRevision(state), "STALE_CONTROL_REVISION", "Task state changed before verification.");
+    for (const check2 of request.checks) ensure(run.criteria.some((c) => c.id === check2.criterionId), "UNKNOWN_CRITERION", `Unknown criterion: ${check2.criterionId}`);
+    let revision = controlRevision(state);
+    const checks = [];
+    for (const check2 of request.checks) {
+      const e = await execute(store, "verify", { ...check2, runId: run.id, expectedControlRevision: revision }, sessionId);
+      revision = e.controlRevision;
+      checks.push({ id: e.id, criterionId: e.criterionId, passed: e.passed, exitCode: e.exitCode, ...e.passed ? {} : { output: e.output } });
+      if (!e.passed) break;
+    }
+    const latest = getRun(await store.load(), sessionId, run.id);
+    const verification = completion(latest, (await fingerprint(store.project)).hash);
+    if (!verification.ready) return { runId: run.id, status: latest.status, completed: false, verification, checks, controlRevision: revision };
+    const result = await execute(store, "complete", { runId: run.id, expectedControlRevision: revision }, sessionId);
+    return { ...result, completed: true, checks };
+  }
+  if (action === "verify") {
+    const request = CheckInput.parse(input2);
+    const state = await store.load();
+    const run = getRun(state, sessionId, runId);
+    active(run);
+    ensure(expectedRevision === void 0 || expectedRevision === state.revision, "STALE_REVISION", "State changed before verification.");
+    ensure(expectedControlRevision === void 0 || expectedControlRevision === controlRevision(state), "STALE_CONTROL_REVISION", "Task state changed before verification.");
     ensure(run.criteria.some((c) => c.id === request.criterionId), "UNKNOWN_CRITERION", "Unknown criterion.");
     const before = await fingerprint(store.project);
     let exitCode = 0, output2 = "";
@@ -20097,20 +20237,32 @@ async function execute(store, action, raw, sessionId) {
       const evidence = { id: uid("evidence"), criterionId: request.criterionId, description: request.description, kind: "command", command: JSON.stringify(request.argv), exitCode, passed: exitCode === 0 && before.hash === after.hash, output: redact(output2).slice(-16e3), codeHash: before.hash, source: "runtime", at: now(), planVersion: version2(target), taskRevision: target.taskRevision };
       target.evidence.push(evidence);
       touch(target);
-      return { ...evidence, workspaceChangedDuringCheck: before.hash !== after.hash };
-    });
+      return { ...evidence, workspaceChangedDuringCheck: before.hash !== after.hash, controlRevision: controlRevision(s) + 1 };
+    }, void 0, expectedControlRevision);
   }
-  const currentCode = ["start", "evidence", "complete", "resume", "revise"].includes(action) ? await fingerprint(store.project) : void 0;
+  const currentCode = ["start", "begin", "evidence", "complete", "resume", "revise"].includes(action) ? await fingerprint(store.project) : void 0;
   return store.mutate(action, async (state) => {
-    if (action === "start") {
-      const request = external_exports.object({ goal: external_exports.string().min(1).max(16e3), constraints: external_exports.array(external_exports.string()).default([]), criteria: external_exports.array(Criterion).min(1) }).strict().parse(input2);
+    if (action === "start" || action === "begin") {
+      const begin = action === "begin" ? StartInput.extend({ route: RouteInput, plan: Plan.optional(), assignment: AssignmentInput.optional() }).parse(input2) : void 0;
+      const request = begin ?? StartInput.parse(input2);
       ensure(new Set(request.criteria.map((c) => c.id)).size === request.criteria.length, "DUPLICATE_CRITERION", "Criterion IDs must be unique.");
       const sid = id.parse(sessionId ?? uid("manual"));
       const previous = state.sessions[sid]?.runId;
       ensure(!previous || ["completed", "cancelled"].includes(state.runs[previous].status), "ACTIVE_RUN_EXISTS", "Resume or cancel the existing run before starting another.");
-      const run2 = { id: uid("run"), sessionId: sid, ...request, taskRevision: 1, status: "active", createdAt: now(), updatedAt: now(), baseline: currentCode, plans: [], assignments: [], evidence: [], decisions: [], attempts: [] };
+      const run2 = { id: uid("run"), sessionId: sid, goal: request.goal, constraints: request.constraints, criteria: request.criteria, taskRevision: 1, status: "active", createdAt: now(), updatedAt: now(), baseline: currentCode, plans: [], assignments: [], evidence: [], decisions: [], attempts: [] };
       state.runs[run2.id] = run2;
       state.sessions[sid] = { ...state.sessions[sid], runId: run2.id };
+      if (begin) {
+        const currentConfig = await store.config();
+        run2.route = chooseRoute(run2, begin.route, currentConfig);
+        if (!run2.route.role) {
+          run2.status = "waiting_for_input";
+          run2.pauseReason = run2.route.environmentBlocker;
+        }
+        addPlan(run2, begin.plan ?? { summary: run2.goal, invariants: run2.constraints, steps: [{ id: "implement", objective: run2.goal, criteria: run2.criteria.map((c) => c.id) }] });
+        const assignment = begin.assignment ? reserve(run2, state, currentConfig, begin.assignment) : void 0;
+        return { runId: run2.id, sessionId: sid, status: run2.status, planVersion: version2(run2), controlRevision: controlRevision(state) + 1, assignment };
+      }
       return run2;
     }
     if (action === "resume") {
@@ -20238,7 +20390,17 @@ async function execute(store, action, raw, sessionId) {
       return { runId: run.id, status: run.status, criteria: run.criteria.map((c) => c.id), codeHash: currentCode.hash, usage: usage(run) };
     }
     throw new HarnessError("UNKNOWN_ACTION", `Unknown action: ${action}`);
-  }, expectedRevision);
+  }, expectedRevision, expectedControlRevision);
+}
+function compactUsage(run) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const a of run.assignments) {
+    const key = JSON.stringify([a.model, a.actualModel ?? null, a.effort]);
+    const group = counts.get(key) ?? { requested: a.model, actual: a.actualModel ?? null, effort: a.effort, assignments: 0 };
+    group.assignments++;
+    counts.set(key, group);
+  }
+  return { assignments: run.assignments.length, expertAssignments: run.assignments.filter((a) => a.role === "expert").length, models: [...counts.values()], tokens: null, cost: null };
 }
 function usage(run) {
   return { assignments: run.assignments.length, expertAssignments: run.assignments.filter((a) => a.role === "expert").length, models: run.assignments.map((a) => ({ assignmentId: a.id, requested: a.model, actual: a.actualModel ?? null, effort: a.effort })), tokens: null, cost: null, coverage: "Assignments only; native model-internal requests and account billing are not measured." };
@@ -20288,16 +20450,14 @@ function returnedTask(response) {
 async function handleHook(store, raw) {
   const event = HookInput.parse(raw);
   const type = event.hook_event_name;
-  if (!await exists(`${store.dir}/config.json`)) {
-    return type === "SessionStart" ? context(type, `Orchestrail native session ID: ${event.session_id}. Run the setup skill before using Orchestrail in this project.`) : {};
-  }
+  if (!await exists(`${store.dir}/config.json`)) return {};
   const state = await store.load();
   let run;
   try {
     run = getRun(state, event.session_id);
   } catch {
   }
-  if (!run) return ["SessionStart", "UserPromptSubmit"].includes(type) ? context(type, `Orchestrail native session ID: ${event.session_id}. Pass this ID as --session when activating Orchestrail.`) : {};
+  if (!run || run.status === "completed") return {};
   const tool = event.tool_name ?? "";
   const receipt = event.tool_use_id ? `${type}:${event.session_id}:${event.turn_id ?? ""}:${event.tool_use_id}` : event.agent_id ? `${type}:${event.session_id}:${event.turn_id ?? ""}:${event.agent_id}` : void 0;
   if (receipt && state.receipts.includes(receipt)) return {};
@@ -20430,7 +20590,7 @@ import path3 from "node:path";
 // package.json
 var package_default = {
   name: "codex-orchestrail",
-  version: "0.2.0",
+  version: "0.3.0",
   private: true,
   type: "module",
   packageManager: "pnpm@11.5.0",
@@ -20495,71 +20655,6 @@ async function settings(project) {
     modelAvailability: "Use models and effort levels available on the current host; accepting a config value does not prove availability."
   };
 }
-
-// packages/runtime/src/store.ts
-import fs2 from "node:fs/promises";
-import path2 from "node:path";
-var Store = class {
-  constructor(project) {
-    this.project = project;
-  }
-  project;
-  get dir() {
-    return path2.join(this.project, ".orchestrail");
-  }
-  async config() {
-    return Config.parse(await readJson(await safePath(this.project, ".orchestrail/config.json")));
-  }
-  async load() {
-    await safePath(this.project, ".orchestrail");
-    const file2 = path2.join(this.dir, "events.jsonl");
-    if (!await exists(file2)) return { schemaVersion: 1, revision: 0, project: this.project, sessions: {}, runs: {}, receipts: [] };
-    const raw = await fs2.readFile(file2, "utf8");
-    const lines = raw.split("\n");
-    lines.pop();
-    let result;
-    let revision = 0;
-    for (const line of lines) {
-      if (!line) continue;
-      const event = JSON.parse(line);
-      ensure(event.revision === revision + 1 && event.checksum === hash2(JSON.stringify(event.state)), "CORRUPT_LOG", "Event log checksum or revision mismatch.");
-      StateShape.parse(event.state);
-      result = event.state;
-      ensure(result.revision === event.revision, "CORRUPT_LOG", "State revision does not match event.");
-      revision = event.revision;
-    }
-    const state = result ?? { schemaVersion: 1, revision: 0, project: this.project, sessions: {}, runs: {}, receipts: [] };
-    ensure(state.project === this.project, "WORKSPACE_MOVED", "State belongs to another checkout. Start a new run in this checkout.");
-    return state;
-  }
-  async mutate(kind, update, expectedRevision) {
-    await safePath(this.project, ".orchestrail");
-    return lock(this.dir, async () => {
-      const state = await this.load();
-      ensure(expectedRevision === void 0 || expectedRevision === state.revision, "STALE_REVISION", "State changed; reload status before updating.");
-      const before = JSON.stringify(state);
-      const result = await update(state);
-      if (before === JSON.stringify(state)) return result;
-      state.revision++;
-      const event = { id: uid("event"), at: now(), kind, revision: state.revision, checksum: hash2(JSON.stringify(state)), state };
-      const file2 = path2.join(this.dir, "events.jsonl");
-      if (await exists(file2)) {
-        const previous = await fs2.readFile(file2);
-        const committed = previous.lastIndexOf(10) + 1;
-        if (committed !== previous.length) await fs2.truncate(file2, committed);
-      }
-      const handle = await fs2.open(file2, "a", 384);
-      try {
-        await handle.writeFile(JSON.stringify(event) + "\n");
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      await writeJson(path2.join(this.dir, "snapshot.json"), state);
-      return result;
-    });
-  }
-};
 
 // packages/runtime/src/install.ts
 var json2 = (value) => JSON.stringify(value, null, 2) + "\n";
@@ -20741,12 +20836,13 @@ var HELP = `Orchestrail ${VERSION} \u2014 state helper for the Codex plugin
 
 node <plugin>/scripts/orchestrail.mjs ACTION --project /path/to/repo [--session ID] [--input request.json]
 
-Actions: setup, config, configure, doctor, uninstall, start, status, route, plan, assign, bind,
+Actions: setup, config, configure, doctor, uninstall, begin, finish, start, status, route, plan, assign, bind,
          result, evidence, verify, attempt, decision, packet, fingerprint,
          complete, revise, pause, cancel, resume, recover-lock, hook
 
 Requests are JSON from --input or stdin. Hook input is the Codex event JSON.
-Include runId to select a run, and expectedRevision for optimistic writes.
+Include runId to select a run, and expectedControlRevision for task-state optimistic writes.
+Legacy expectedRevision checks all journal events. status is compact; {"detail":true} includes history.
 Models execute in Codex; this helper never calls a model or changes login settings.
 `;
 async function stdin() {

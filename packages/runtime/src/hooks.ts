@@ -31,13 +31,11 @@ function returnedTask(response: unknown): string | undefined {
 export async function handleHook(store: Store, raw: unknown): Promise<unknown> {
   const event = HookInput.parse(raw);
   const type = event.hook_event_name;
-  if (!(await exists(`${store.dir}/config.json`))) {
-    return type === 'SessionStart' ? context(type, `Orchestrail native session ID: ${event.session_id}. Run the setup skill before using Orchestrail in this project.`) : {};
-  }
+  if (!(await exists(`${store.dir}/config.json`))) return {};
   const state = await store.load();
   let run: Run | undefined;
   try { run = getRun(state, event.session_id); } catch { /* not activated */ }
-  if (!run) return ['SessionStart', 'UserPromptSubmit'].includes(type) ? context(type, `Orchestrail native session ID: ${event.session_id}. Pass this ID as --session when activating Orchestrail.`) : {};
+  if (!run || run.status === 'completed') return {};
   const tool = event.tool_name ?? '';
   // Stable tool IDs deduplicate retried hook delivery without treating repeated reads as new work.
   const receipt = event.tool_use_id ? `${type}:${event.session_id}:${event.turn_id ?? ''}:${event.tool_use_id}` : event.agent_id ? `${type}:${event.session_id}:${event.turn_id ?? ''}:${event.agent_id}` : undefined;

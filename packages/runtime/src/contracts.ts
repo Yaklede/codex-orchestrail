@@ -101,12 +101,12 @@ export type Run = {
   observations?: { tool: string; at: string; summary: string; toolUseId?: string }[];
 };
 export type State = {
-  schemaVersion: 1; revision: number; project: string;
+  schemaVersion: 1; revision: number; controlRevision?: number; project: string;
   sessions: Record<string, { runId?: string; observedModel?: string; lastHook?: string; hookAt?: string }>;
   runs: Record<string, Run>; receipts: string[];
 };
 export const StateShape = z.object({
-  schemaVersion: z.literal(1), revision: z.number().int().nonnegative(), project: text,
+  schemaVersion: z.literal(1), revision: z.number().int().nonnegative(), controlRevision: z.number().int().nonnegative().optional(), project: text,
   sessions: z.record(z.string(), z.object({ runId: z.string().optional(), observedModel: z.string().optional(), lastHook: z.string().optional(), hookAt: z.string().optional() })),
   runs: z.record(z.string(), z.unknown()), receipts: z.array(z.string()),
 });

@@ -6,15 +6,16 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
-import { jsonLines, normalizeUsage, parseExec, parseRollout, sumThreads, weeklyObservation, SUPPORTED_CODEX_VERSION } from './benchmark/metrics.mjs';
+import { jsonLines, parseExec, parseRollout, sumThreads, transcriptLocations, weeklyObservation, SUPPORTED_CODEX_VERSION } from './benchmark/metrics.mjs';
 
 const { values } = parseArgs({ options: {
   run: { type: 'boolean', default: false }, mode: { type: 'string' }, out: { type: 'string' },
   'stop-at-weekly-percent': { type: 'string' }, 'weekly-resets-at': { type: 'string' },
   'timeout-seconds': { type: 'string', default: '360' },
+  workload: { type: 'string', default: 'planner' },
 } });
-if (!values.run || !['sol', 'astra', 'orchestrail'].includes(values.mode) || !values.out) {
-  throw new Error('Explicit opt-in required: --run --mode sol|astra|orchestrail --out NEW_DIRECTORY --stop-at-weekly-percent N --weekly-resets-at UNIX_SECONDS');
+if (!values.run || !['sol', 'astra', 'orchestrail', 'astra-direct', 'astra-delegate'].includes(values.mode) || !values.out || !['planner', 'queue'].includes(values.workload)) {
+  throw new Error('Explicit opt-in required: --run --mode sol|astra|orchestrail|astra-direct|astra-delegate --workload planner|queue --out NEW_DIRECTORY --stop-at-weekly-percent N --weekly-resets-at UNIX_SECONDS');
 }
 const stopAt = Number(values['stop-at-weekly-percent']);
 const resetsAt = Number(values['weekly-resets-at']);
@@ -28,7 +29,7 @@ const outputDir = path.resolve(values.out);
 await fs.mkdir(path.dirname(outputDir), { recursive: true });
 await fs.mkdir(outputDir); // Never overwrite a previous measurement.
 const project = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), `orchestrail-bench-${values.mode}-`)));
-await fs.cp(path.join(repo, 'benchmarks/planner/fixture'), project, { recursive: true });
+await fs.cp(path.join(repo, 'benchmarks', values.workload, 'fixture'), project, { recursive: true });
 const git = args => execFileSync('git', ['-C', project, ...args], { encoding: 'utf8', env: {
   ...process.env, GIT_AUTHOR_DATE: '2000-01-01T00:00:00Z', GIT_COMMITTER_DATE: '2000-01-01T00:00:00Z',
 } }).trim();
@@ -39,19 +40,20 @@ const baselineCommit = git(['rev-parse', 'HEAD']);
 const baselineTree = git(['rev-parse', 'HEAD^{tree}']);
 const spec = await fs.readFile(path.join(project, 'SPEC.md'), 'utf8');
 const originalTests = await fs.readFile(path.join(project, 'public-check.mjs'), 'utf8');
-const acceptance = await fs.readFile(path.join(repo, 'benchmarks/planner/acceptance.mjs'), 'utf8');
+const acceptance = await fs.readFile(path.join(repo, 'benchmarks', values.workload, 'acceptance.mjs'), 'utf8');
 const evaluator = path.join(outputDir, 'acceptance.mjs');
 await fs.writeFile(evaluator, acceptance);
 const mode = values.mode;
-const model = mode === 'astra' ? 'gpt-6-astra' : 'gpt-5.6-sol';
+const model = mode.startsWith('astra') ? 'gpt-6-astra' : 'gpt-5.6-sol';
 const effort = mode === 'orchestrail' ? 'medium' : 'high';
+const tracked = ['orchestrail', 'astra-delegate'].includes(mode);
 let runtime = null;
 let plugin = null;
-if (mode === 'orchestrail') {
+if (tracked || mode === 'astra-direct') {
   plugin = path.join(project, '.codex/orchestrail');
   await fs.cp(path.join(repo, 'plugins/orchestrail'), plugin, { recursive: true });
   runtime = path.join(plugin, 'scripts/orchestrail.mjs');
-  execFileSync(process.execPath, [runtime, 'setup', '--project', project], { input: JSON.stringify({ preset: 'balanced' }) });
+  if (tracked) execFileSync(process.execPath, [runtime, 'setup', '--project', project], { input: JSON.stringify({ preset: 'balanced' }) });
 }
 
 const hookFile = path.join(outputDir, 'hook.mjs');
@@ -68,17 +70,22 @@ if(runtime){const r=spawnSync(process.execPath,[runtime,'hook'],{input,encoding:
 const events = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SubagentStart', 'SubagentStop', 'Stop', 'Interrupt', 'SessionEnd'];
 const hookCommand = `node '${hookFile.replaceAll("'", "'\\''")}'`;
 const overrides = events.flatMap(event => ['-c', `hooks.${event}=[{hooks=[{type="command",command=${JSON.stringify(hookCommand)},timeout=8}]}]`]);
-const commonPrompt = `Complete the dependency batch planner task in this checkout. Read SPEC.md and the existing code and public tests. Implement every requirement, run node --test public-check.mjs, and report briefly. Use only local project files and ordinary shell/file tools; do not use network, external integrations, other projects, or change user configuration. Do not edit SPEC.md or public-check.mjs. Do not commit or push. Stop once the task is complete.`;
+const commonPrompt = `Complete the ${values.workload === 'planner' ? 'dependency batch planner' : 'immutable job queue'} task in this checkout. Read SPEC.md and the existing code and public tests. Implement every requirement, run node --test public-check.mjs, and report briefly. Use only local project files and ordinary shell/file tools; do not use network, external integrations, other projects, or change user configuration. Do not edit SPEC.md or public-check.mjs. Do not commit or push. Stop once the task is complete.`;
 const policy = mode === 'orchestrail'
   ? `Use the Orchestrail workflow. Read ${plugin}/skills/orchestrail/SKILL.md and its protocol. Setup already uses the balanced preset. The bundled helper is ${runtime}; project is ${project}. This benchmark explicitly requests one bounded native Builder delegation for the source fix while the root independently reviews SPEC.md and prepares acceptance verification. Use a fresh context and the exact reserved task_name, model and effort. Do not recursively delegate. Follow the normal route/plan/assign/result/verify/complete protocol. Use AC-1 for public tests and AC-2 for inspection of the complete specification. Escalate only if the normal policy requires it; do not force an expert call. Keep the root's changes to verification and harness state while the Builder owns the source. Include real evidence for both criteria. Finish the harness run before the final response.`
-  : `Perform this task directly in this main agent without delegation or Orchestrail. Do not spawn subagents.`;
+  : mode === 'astra-direct'
+    ? `Use Orchestrail for this task. Read ${plugin}/skills/orchestrail/SKILL.md first and follow its default workflow. This is the direct-path overhead arm; perform implementation in the main agent without subagents. Do not initialize tracked state merely for the benchmark.`
+    : mode === 'astra-delegate'
+      ? `Use Orchestrail. Read ${plugin}/skills/orchestrail/SKILL.md. This experiment explicitly requests Astra main-agent judgment followed by one bounded Sol Builder implementation. Setup already uses the balanced preset. Resolve design choices first and pass the concrete decisions and relevant requirements in a fresh minimal context. Use begin to create a run and reserve the Builder with the exact returned model, effort and task_name; include the required Result contract. While it works, independently review edge cases and prepare verification, without duplicating implementation. Do not recursively delegate or add a reviewer/expert. Use AC-1 for public tests and AC-2 for complete specification inspection, record genuine evidence, and finish the tracked run. Prefer compact responses and JSON stdin. The helper is ${runtime}.`
+      : `Perform this task directly in this main agent without delegation or Orchestrail. Do not spawn subagents.`;
 const prompt = `${commonPrompt}\n\n${policy}`;
 await fs.writeFile(path.join(outputDir, 'prompt.txt'), prompt);
 await fs.writeFile(path.join(outputDir, 'metadata.json'), JSON.stringify({
-  mode, model, effort, version, project, baselineCommit, baselineTree,
+  mode, workload: values.workload, model, effort, version, project, baselineCommit, baselineTree,
   fixtureHash: createHash('sha256').update(spec).update(originalTests).digest('hex'),
   evaluatorHash: createHash('sha256').update(acceptance).digest('hex'),
-  harnessConfig: runtime ? JSON.parse(await fs.readFile(path.join(project, '.orchestrail/config.json'), 'utf8')) : null,
+  harnessConfig: tracked ? JSON.parse(await fs.readFile(path.join(project, '.orchestrail/config.json'), 'utf8')) : null,
+  pluginHash: plugin ? createHash('sha256').update(await fs.readFile(runtime)).update(await fs.readFile(path.join(plugin, 'skills/orchestrail/SKILL.md'))).digest('hex') : null,
   stopAtWeeklyPercent: stopAt, weeklyResetsAt: resetsAt, timeoutMs,
   sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(),
 }, null, 2));
@@ -108,11 +115,7 @@ const monitor = setInterval(async () => {
   polling = true;
   try {
     const hooks = await records();
-    const locations = new Map();
-    for (const e of hooks) {
-      if (e.transcriptPath) locations.set(e.sessionId, e.transcriptPath);
-      if (e.agentTranscriptPath) locations.set(e.agentId, e.agentTranscriptPath);
-    }
+    const locations = transcriptLocations(hooks);
     for (const [id, location] of locations) {
       // Ignore incomplete streaming records; final accounting fails closed.
       try {
@@ -129,13 +132,16 @@ const exitCode = await new Promise(resolve => {
   child.once('error', error => { errors += error.message; resolve(null); });
   child.once('close', resolve);
 });
-clearTimeout(timer); clearInterval(monitor); if (killing) clearTimeout(killing);
+clearTimeout(timer); clearInterval(monitor);
+// Keep the delayed group termination alive after an interrupted parent exits:
+// a child tool process may still belong to the benchmark process group.
+if (killing && !stopReason) clearTimeout(killing);
 process.off('SIGINT', interrupt); process.off('SIGTERM', interrupt);
 await fs.writeFile(path.join(outputDir, 'native-output.jsonl'), output);
 await fs.writeFile(path.join(outputDir, 'native-stderr.log'), errors);
 
 const report = {
-  mode, model, effort, version, baselineCommit, baselineTree, durationSeconds: (Date.now() - start) / 1000,
+  mode, workload: values.workload, model, effort, version, baselineCommit, baselineTree, durationSeconds: (Date.now() - start) / 1000,
   exitCode, stopReason, project, quality: null, harness: null,
   measurement: { complete: false, source: 'codex-exec-json + experimental version-pinned per-thread rollout audit', threads: [], totals: null, weekly: null, errors: [] },
 };
@@ -153,7 +159,7 @@ try {
   const weekly = [...parentAudit.weekly];
   const childStarts = hooks.filter(e => e.event === 'SubagentStart');
   const childIds = [...new Set(childStarts.map(e => e.agentId))];
-  if (mode !== 'orchestrail' && childIds.length) throw new Error('Single-model baseline unexpectedly delegated');
+  if (!tracked && childIds.length) throw new Error('Direct execution arm unexpectedly delegated');
   for (const id of childIds) {
     const startEvent = childStarts.find(e => e.agentId === id);
     const stopEvent = hooks.findLast(e => e.event === 'SubagentStop' && e.agentId === id);
@@ -163,7 +169,12 @@ try {
     weekly.push(...parsed.weekly);
   }
   report.measurement = { ...report.measurement, complete: true, threads, totals: sumThreads(threads), weekly: weeklyObservation(weekly), parentCommandCount: parent.commandCount };
-  if (mode === 'orchestrail') {
+  if (mode === 'astra-direct') {
+    const exists = await fs.access(path.join(project, '.orchestrail')).then(() => true, () => false);
+    if (exists) throw new Error('Direct path unexpectedly initialized tracked state');
+    report.harness = { runCount: 0, status: 'untracked-direct', assignments: [] };
+  }
+  if (tracked) {
     const state = JSON.parse(await fs.readFile(path.join(project, '.orchestrail/snapshot.json'), 'utf8'));
     const runs = Object.values(state.runs);
     report.harness = { runCount: runs.length, status: runs.at(-1)?.status, assignments: runs.at(-1)?.assignments.map(a => ({ role: a.role, model: a.actualModel, effort: a.effort, status: a.status, nativeAgentId: a.nativeAgentId })), evidenceCount: runs.at(-1)?.evidence.length };
@@ -173,6 +184,20 @@ try {
   report.measurement.complete = false;
   report.measurement.totals = null;
   report.measurement.errors.push(error.message);
+}
+if (!report.measurement.complete) {
+  const hooks = await records();
+  const observed = [], errors = [];
+  for (const [threadId, location] of transcriptLocations(hooks)) {
+    try {
+      const parsed = parseRollout(await fs.readFile(location, 'utf8'), threadId, version);
+      const child = hooks.find(e => e.event === 'SubagentStart' && e.agentId === threadId);
+      const model = child?.model ?? hooks.find(e => e.sessionId === threadId && !e.agentId && e.model)?.model;
+      observed.push({ threadId, kind: child ? 'child' : 'parent', model, usage: parsed.usage });
+    } catch (error) { errors.push(error.message); }
+  }
+  report.measurement.partialObservation = { threads: observed, totals: observed.length ? sumThreads(observed) : null, errors,
+    meaning: 'Last observed cumulative counts, not a completed-run total; missing or in-flight usage may remain.' };
 }
 const specPreserved = spec === await fs.readFile(path.join(project, 'SPEC.md'), 'utf8');
 const publicTestsPreserved = originalTests === await fs.readFile(path.join(project, 'public-check.mjs'), 'utf8');

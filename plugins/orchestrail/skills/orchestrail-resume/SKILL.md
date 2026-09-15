@@ -7,7 +7,7 @@ description: Resume a selected interrupted or paused Orchestrail run after check
 
 Resolve `../../scripts/orchestrail.mjs` relative to this skill directory. Read [the protocol](../../references/protocol.md).
 
-Inspect the selected run with `status`, then check whether its native agents/commands still run. Interrupt them only as authorized by the user's resume/cancel request, and verify they stopped before releasing assignments with `pause` and `nativeAgentsStopped: true`. A parent's interruption does not prove child processes stopped.
+Inspect the selected run with compact `status` (request `detail:true` only for relevant history), then check whether its native agents/commands still run. Interrupt them only as authorized by the user's resume/cancel request, and verify they stopped before releasing assignments with `pause` and `nativeAgentsStopped: true`. A parent's interruption does not prove child processes stopped.
 
 Call `resume` with `runId` and the current session ID. Inspect reported code changes, plan, evidence, and actual external operation state before continuing. Do not repeat an uncertain deployment command automatically. Old native agent IDs may be unusable; create new bounded assignments from the persisted packet.
 

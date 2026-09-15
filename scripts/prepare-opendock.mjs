@@ -16,12 +16,12 @@ for (const skill of skills) {
   await fs.writeFile(path.join(folder, 'SKILL.md'), `${frontmatter}\n\nRead and follow [the shared Orchestrail workflow](../../orchestrail/skills/${skill}/SKILL.md). Resolve its runtime and references relative to that shared file. This is the project-local OpenDock distribution. Native plugin hooks are not installed by this dock; use explicit helper calls and keep the returned session ID.\n`);
 }
 await fs.mkdir(path.join(root, 'payload'), { recursive: true });
-await fs.writeFile(path.join(root, 'payload/AGENTS.md'), `## Orchestrail\n\nWhen the user asks to use Orchestrail, or continues an active Orchestrail run, read the matching skill in .codex/skills/orchestrail/SKILL.md (or orchestrail-setup, orchestrail-status, orchestrail-resume). Keep unrelated work unchanged. Use native Codex subagents for the bounded roles described by the workflow when independent work is useful. Keep state in .orchestrail/ and preserve the user's existing authorization.\n`);
+await fs.writeFile(path.join(root, 'payload/AGENTS.md'), `## Orchestrail\n\nWhen the user asks to use Orchestrail, or continues an active Orchestrail run, read the matching skill in .codex/skills/orchestrail/SKILL.md (or orchestrail-setup, orchestrail-status, orchestrail-resume). Keep unrelated work unchanged. Execute directly by default. Use native Codex subagents only for substantial bounded work after decisions are resolved and useful independent parent work remains. Keep tracked state in .orchestrail/ when needed and preserve the user's existing authorization.\n`);
 await fs.copyFile('opendock/DOCK.md', path.join(root, 'DOCK.md'));
 await fs.copyFile('LICENSE', path.join(root, 'LICENSE'));
 const manifest = {
   opendock: 1, name: 'Orchestrail',
-  summary: 'Sol execution and Astra decisions in one Codex conversation, with versioned plans and resumable local state.',
+  summary: 'Direct execution and selective delegation in one Codex conversation, with compact resumable state.',
   readme: 'DOCK.md', tags: ['codex', 'orchestration', 'ai-agent', 'development'],
   requires: { runtimes: { node: '>=22.0.0', git: '>=2.0.0' } },
   files: [

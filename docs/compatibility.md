@@ -9,7 +9,7 @@ Verified locally on **2026-09-15**, macOS, Node **22.14.0**, Codex CLI **0.154.0
 | Native Sol and Astra execution | Passed | Separate fresh-context native subagents, actual model slugs observed in SubagentStart |
 | Full harness with real models | Passed | Sol scout → Astra expert → KEEP_PLAN → command verification → completed local run; both observed models matched requests |
 | Real host tool shape | Covered | `collaborationspawn_agent`, opaque message, visible task_name, canonical task response and agent_type default |
-| Runtime, package and measurement behavior | 44 tests passed | Routing, plans, evidence freshness, failed fixes, limits, interruption, writer ownership, journal recovery, preference onboarding/updates, native adapter, standalone package installation and benchmark accounting |
+| Runtime, package and measurement behavior | 53 tests passed | Routing, plans, evidence freshness, failed fixes, limits, interruption, writer ownership, journal recovery, preference onboarding/updates, native adapter, standalone package installation and benchmark accounting |
 | Plugin manifest | Passed | Codex plugin-creator validator, repo marketplace and bundled entrypoint validation |
 | Local Codex installation | Passed | Repo marketplace registration and plugin add; installed bundle matched the source bundle; all four skills appeared in `codex debug prompt-input` |
 | GitHub CI for the initial implementation | Passed | Linux and macOS checks for commit `0b86d8b`; subsequent commits have their own CI results |
@@ -17,9 +17,11 @@ Verified locally on **2026-09-15**, macOS, Node **22.14.0**, Codex CLI **0.154.0
 | OpenDock manifest | Passed | Installed 0.2.0 parser and task-command validation for macOS/Linux |
 | OpenDock file lifecycle | Passed | Its installed collector/planner in a disposable Git fixture; setup doctor ready; update ownership validated; uninstall preserved existing AGENTS.md and local state |
 | OpenDock registry review/public install | Not performed | Payload prepared only; no authentication or deploy request |
+| 0.3 direct-path pilot | Passed, no savings claimed | Same Astra high, fixed 39 tests both pass; 112,032 vs 114,280 tokens; no tracked state or subagent in direct path |
+| 0.3 selective-delegation pilot | Interrupted at budget threshold | Queue source passed 61 tests; Builder completed; parent final verification/complete not finished. Partial usage already exceeds Astra baseline. [Details](benchmark-results-2026-09-15-v03.md). |
 | Token-efficiency pilot | Measured, no savings demonstrated | One routine task, three workflows; explicitly delegated harness path used more tokens and missed a reviewed edge case. See [results](benchmark-results-2026-09-15.md). |
 
-Real-model tests used **low effort** to keep the compatibility fixture bounded. Production defaults of medium/high are configuration values, not separately benchmarked settings. No real deployment, migration, or production health check was executed.
+The original compatibility smoke tests used **low effort** to keep the compatibility fixture bounded. Production defaults of medium/high are configuration values, not separately benchmarked settings. No real deployment, migration, or production health check was executed.
 
 ## Host integration boundaries
 

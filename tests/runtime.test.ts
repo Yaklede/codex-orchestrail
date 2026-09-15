@@ -249,3 +249,100 @@ describe('native hook contracts', () => {
     expect((await run()).assignments[0]?.status).toBe('completed');
   });
 });
+
+describe('direct execution and compact orchestration', () => {
+  test('idle hooks and status do not require setup or create state', async () => {
+    const { root, store } = await fixture();
+    await fs.rm(store.dir, { recursive: true });
+    for (const hook_event_name of ['SessionStart', 'UserPromptSubmit', 'PostToolUse']) {
+      expect(await handleHook(store, { hook_event_name, cwd: root, session_id: 'direct' })).toEqual({});
+    }
+    expect(await execute(store, 'status', {}, 'direct')).toMatchObject({ status: 'idle', run: null, controlRevision: 0 });
+    await expect(fs.access(store.dir)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+  test('observations preserve task revision guards; actual plan changes invalidate them', async () => {
+    const { root, store, call } = await fixture();
+    const before = await call('status') as any;
+    await handleHook(store, { hook_event_name: 'PostToolUse', cwd: root, session_id: 'session-1', tool_name: 'apply_patch', tool_use_id: 'edit-1', tool_input: { patch: 'metadata observation' } });
+    await handleHook(store, { hook_event_name: 'SessionStart', cwd: root, session_id: 'session-1', model: 'gpt-6-astra' });
+    const after = await call('status') as any;
+    expect(after.revision).toBeGreaterThan(before.revision);
+    expect(after.controlRevision).toBe(before.controlRevision);
+    await expect(call('plan', { ...plan, expectedRevision: before.revision })).rejects.toMatchObject({ code: 'STALE_REVISION' });
+    await call('plan', { ...plan, expectedControlRevision: before.controlRevision });
+    await expect(call('pause', { reason: 'Old status', expectedControlRevision: before.controlRevision })).rejects.toMatchObject({ code: 'STALE_CONTROL_REVISION' });
+  });
+  test('legacy journals acquire control revisions without rewriting old events', async () => {
+    const { store, root, call } = await fixture();
+    const file = path.join(store.dir, 'events.jsonl');
+    const lines = (await fs.readFile(file, 'utf8')).trim().split('\n').map(line => {
+      const event = JSON.parse(line); delete event.state.controlRevision;
+      event.checksum = hash(JSON.stringify(event.state)); return JSON.stringify(event);
+    }).join('\n') + '\n';
+    await fs.writeFile(file, lines);
+    const before = await call('status') as any;
+    expect(before.controlRevision).toBe(before.revision);
+    await handleHook(store, { hook_event_name: 'SessionStart', cwd: root, session_id: 'session-1' });
+    await call('pause', { reason: 'Migration', expectedControlRevision: before.controlRevision });
+    expect((await store.load()).controlRevision).toBe(before.controlRevision + 1);
+    expect((await fs.readFile(file, 'utf8')).startsWith(lines)).toBe(true);
+  });
+  test('compact status retains current constraints and blockers without replaying history', async () => {
+    const { store, call } = await fixture();
+    const before = JSON.stringify(await call('status')).length;
+    await store.mutate('diagnostics', state => {
+      const run = getRun(state, 'session-1');
+      run.observations = Array.from({ length: 40 }, () => ({ tool: 'exec_command', at: 'now', summary: 'private old output'.repeat(200) }));
+      run.constraints = ['Preserve compatibility'];
+      run.pauseReason = 'Database unavailable'; run.status = 'paused';
+    });
+    const compact = await call('status') as any;
+    expect(compact.run.constraints).toEqual(['Preserve compatibility']);
+    expect(compact.run.plan.invariants).toEqual(['Preserve the API']);
+    expect(compact.run.plan.steps[0].objective).toBe('Implement');
+    expect(compact.run.pauseReason).toBe('Database unavailable');
+    expect(compact.verification.missing).toEqual(['AC-1']);
+    expect(JSON.stringify(compact).length).toBeLessThan(before + 300);
+    expect(JSON.stringify(compact)).not.toContain('private old output');
+    expect((await call('status', { detail: true }) as any).run.observations).toHaveLength(40);
+  });
+  test('begin atomically starts, plans and reserves; invalid input leaves no run', async () => {
+    const { call, store } = await fixture();
+    const input = { goal: 'Bounded implementation', criteria, route: { kind: 'feature', reason: 'Main agent resolved the design' }, assignment: { role: 'builder', objective: 'Implement the decided design', stepId: 'implement' } };
+    const before = await store.load();
+    await expect(call('begin', { ...input, assignment: { ...input.assignment, stepId: 'unknown' } }, 'new-session')).rejects.toMatchObject({ code: 'UNKNOWN_STEP' });
+    expect(await store.load()).toEqual(before);
+    await expect(call('begin', { ...input, plan: { ...plan, steps: [{ ...plan.steps[0], dependsOn: ['step-1'] }] } }, 'new-session')).rejects.toMatchObject({ code: 'PLAN_CYCLE' });
+    expect(await store.load()).toEqual(before);
+    const result = await call('begin', input, 'new-session') as any;
+    expect(result).toMatchObject({ planVersion: 1, assignment: { role: 'builder', model: 'gpt-5.6-sol', effort: 'high' } });
+    expect((await store.load()).revision).toBe(before.revision + 1);
+    expect((await store.load()).controlRevision).toBe(result.controlRevision);
+  });
+  test('finish verifies and completes in one call, and reuses existing evidence when no checks are requested', async () => {
+    const { call } = await fixture();
+    expect(await call('finish', { checks: [{ criterionId: 'AC-1', description: 'Assert feature exists', argv: [process.execPath, '-e', "require('node:assert/strict').equal(require('node:fs').readFileSync('value.txt','utf8'),'initial')"] }] })).toMatchObject({ completed: true, status: 'completed', checks: [{ passed: true }] });
+    await call('begin', { goal: 'Tracked direct work', criteria, route: { kind: 'routine', reason: 'Direct execution' } });
+    await call('verify', { criterionId: 'AC-1', description: 'Check', argv: [process.execPath, '-e', 'process.exit(0)'] });
+    expect(await call('finish')).toMatchObject({ completed: true, checks: [] });
+  });
+  test('finish retains failed evidence, rejects active workers and cannot reuse stale evidence', async () => {
+    const { call, root, run } = await fixture();
+    expect(await call('finish', { checks: [{ criterionId: 'AC-1', description: 'Fails', argv: [process.execPath, '-e', 'process.exit(1)'] }] })).toMatchObject({ completed: false, status: 'active', checks: [{ passed: false }] });
+    expect((await run()).evidence.at(-1)?.passed).toBe(false);
+    await call('verify', { criterionId: 'AC-1', description: 'Check', argv: [process.execPath, '-e', 'process.exit(0)'] });
+    await fs.writeFile(path.join(root, 'value.txt'), 'changed');
+    expect(await call('finish')).toMatchObject({ completed: false, verification: { missing: ['AC-1'] } });
+    await call('assign', { role: 'builder', objective: 'Write', stepId: 'step-1' });
+    await expect(call('finish')).rejects.toMatchObject({ code: 'ASSIGNMENT_ACTIVE' });
+  });
+  test('finish validates every requested criterion and stale guard before any command runs', async () => {
+    const { call, root } = await fixture();
+    const check = { criterionId: 'AC-1', description: 'Must not execute', argv: [process.execPath, '-e', "require('node:fs').writeFileSync('side-effect.txt','ran')"] };
+    const before = await call('status') as any;
+    await call('plan', plan);
+    await expect(call('finish', { checks: [check], expectedControlRevision: before.controlRevision })).rejects.toMatchObject({ code: 'STALE_CONTROL_REVISION' });
+    await expect(call('finish', { checks: [check, { ...check, criterionId: 'unknown' }] })).rejects.toMatchObject({ code: 'UNKNOWN_CRITERION' });
+    await expect(fs.access(path.join(root, 'side-effect.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});

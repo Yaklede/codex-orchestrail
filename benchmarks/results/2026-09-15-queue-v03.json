@@ -1,0 +1,123 @@
+{
+  "date": "2026-09-15",
+  "kind": "budget-bounded selective-delegation pilot",
+  "codexVersion": "codex-cli 0.154.0",
+  "fixture": "queue",
+  "fixedTestsBeforeRuns": 61,
+  "executionOrder": [
+    "astra",
+    "astra-delegate"
+  ],
+  "baselineCommit": "70759e45d030118be32a324fe7659dd34bfc1cc5",
+  "baselineTree": "0b9ec6a9ecf38b3a45d4774eb26ff925ab456e3b",
+  "fixtureSha256": "c0eb1207073b9e2684b617cfe5ec9fd6ff11bca61aefd06057592f60c383d989",
+  "evaluatorSha256": "7370989eee7f9c3fcfa50e4b8448bf0b3aac5c71a80f8cac92afdc933d6e44b1",
+  "baseline": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "durationSeconds": 182.495,
+    "quality": {
+      "passed": true,
+      "specPreserved": true,
+      "publicTestsPreserved": true,
+      "exitCode": 0,
+      "tests": 61
+    },
+    "measurementComplete": true,
+    "usage": {
+      "input_tokens": 93434,
+      "cached_input_tokens": 69376,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 5259,
+      "reasoning_output_tokens": 242,
+      "total_tokens": 98693,
+      "uncached_input_tokens": 24058
+    },
+    "threads": [
+      {
+        "kind": "parent",
+        "model": "gpt-6-astra",
+        "usage": {
+          "input_tokens": 93434,
+          "cached_input_tokens": 69376,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5259,
+          "reasoning_output_tokens": 242,
+          "total_tokens": 98693,
+          "uncached_input_tokens": 24058
+        }
+      }
+    ],
+    "referenceStandardCredits": 14.32265
+  },
+  "delegated": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "durationSeconds": 184.1,
+    "stopReason": "weekly_observation_threshold",
+    "quality": {
+      "passed": false,
+      "specPreserved": true,
+      "publicTestsPreserved": true,
+      "exitCode": 0,
+      "tests": 61
+    },
+    "measurementComplete": false,
+    "completeUsage": null,
+    "pluginRuntimeAndMainSkillSha256": "4ea10d64734e6dde0fd961a29d22f92c01ba7025bdf57621bb335f530d5d16d7",
+    "observedPartialUsage": {
+      "input_tokens": 302376,
+      "cached_input_tokens": 240384,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 10114,
+      "reasoning_output_tokens": 2145,
+      "total_tokens": 312490,
+      "uncached_input_tokens": 61992
+    },
+    "observedThreads": [
+      {
+        "kind": "parent",
+        "model": "gpt-6-astra",
+        "usage": {
+          "input_tokens": 150405,
+          "cached_input_tokens": 133248,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5084,
+          "reasoning_output_tokens": 390,
+          "total_tokens": 155489,
+          "uncached_input_tokens": 17157
+        }
+      },
+      {
+        "kind": "child",
+        "model": "gpt-5.6-sol",
+        "usage": {
+          "input_tokens": 151971,
+          "cached_input_tokens": 107136,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 5030,
+          "reasoning_output_tokens": 1755,
+          "total_tokens": 157001,
+          "uncached_input_tokens": 44835
+        }
+      }
+    ],
+    "observedReferenceStandardCredits": 22.04531,
+    "childStopObserved": true,
+    "nativeProcessAbsentAfterStop": true,
+    "meaning": "Parent turn interrupted at the observed weekly threshold. Partial observations are not a final or complete-run measurement. Source passed 61 tests at interruption; final parent verification and tracked completion were not finished."
+  },
+  "accountObservation": {
+    "usedBeforeImplementation": 43,
+    "stopAtUsedPercent": 45,
+    "usedAtStop": 45,
+    "scope": "Entire account, including implementation/analysis and other work; not isolated benchmark charging"
+  },
+  "rateSource": "https://learn.chatgpt.com/docs/pricing#token-rates",
+  "limitations": [
+    "One execution per arm; explicit delegation, not automatic routing evaluation",
+    "Incomplete parent turn cannot establish the cost of equal completed outcomes",
+    "Already observed reference cost exceeds completed Astra baseline; savings were not demonstrated",
+    "Source/skill/bundle metadata captured before later compact current-plan detail and telemetry-owner refinements"
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "date": "2026-09-15",
+  "kind": "single-run matched-model direct-path pilot",
+  "codexVersion": "codex-cli 0.154.0",
+  "executionOrder": [
+    "astra",
+    "astra-direct"
+  ],
+  "fixture": "planner",
+  "fixedTestsBeforeRuns": 39,
+  "workflows": [
+    {
+      "mode": "astra",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "durationSeconds": 123.118,
+      "quality": {
+        "passed": true,
+        "specPreserved": true,
+        "publicTestsPreserved": true,
+        "exitCode": 0,
+        "tests": 39
+      },
+      "measurementComplete": true,
+      "usage": {
+        "input_tokens": 108800,
+        "cached_input_tokens": 87040,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3232,
+        "reasoning_output_tokens": 144,
+        "total_tokens": 112032,
+        "uncached_input_tokens": 21760
+      },
+      "threads": [
+        {
+          "kind": "parent",
+          "model": "gpt-6-astra",
+          "usage": {
+            "input_tokens": 108800,
+            "cached_input_tokens": 87040,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 3232,
+            "reasoning_output_tokens": 144,
+            "total_tokens": 112032,
+            "uncached_input_tokens": 21760
+          }
+        }
+      ],
+      "parentCommandCount": 7,
+      "harness": null,
+      "referenceStandardCredits": 11.656,
+      "baselineCommit": "68800214591a1e9716f82ad0eb3c9efc1f9b5977",
+      "baselineTree": "010cf59f54622826fd4038b26e7d8e8d4adf85a8",
+      "fixtureSha256": "0b63ab41ddcecfa55fe3b8481489f1fbb977209c28f2e50096d26e3ab8f56f29",
+      "evaluatorSha256": "e0a4c23c189c9aecf0273b3ec2f961f3b9600eddc573dbae62ef342ca4a2a975",
+      "pluginRuntimeAndMainSkillSha256": null
+    },
+    {
+      "mode": "astra-direct",
+      "model": "gpt-6-astra",
+      "effort": "high",
+      "durationSeconds": 115.045,
+      "quality": {
+        "passed": true,
+        "specPreserved": true,
+        "publicTestsPreserved": true,
+        "exitCode": 0,
+        "tests": 39
+      },
+      "measurementComplete": true,
+      "usage": {
+        "input_tokens": 111440,
+        "cached_input_tokens": 84096,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 2840,
+        "reasoning_output_tokens": 102,
+        "total_tokens": 114280,
+        "uncached_input_tokens": 27344
+      },
+      "threads": [
+        {
+          "kind": "parent",
+          "model": "gpt-6-astra",
+          "usage": {
+            "input_tokens": 111440,
+            "cached_input_tokens": 84096,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2840,
+            "reasoning_output_tokens": 102,
+            "total_tokens": 114280,
+            "uncached_input_tokens": 27344
+          }
+        }
+      ],
+      "parentCommandCount": 6,
+      "harness": {
+        "runCount": 0,
+        "status": "untracked-direct",
+        "assignments": []
+      },
+      "referenceStandardCredits": 12.4884,
+      "baselineCommit": "68800214591a1e9716f82ad0eb3c9efc1f9b5977",
+      "baselineTree": "010cf59f54622826fd4038b26e7d8e8d4adf85a8",
+      "fixtureSha256": "0b63ab41ddcecfa55fe3b8481489f1fbb977209c28f2e50096d26e3ab8f56f29",
+      "evaluatorSha256": "e0a4c23c189c9aecf0273b3ec2f961f3b9600eddc573dbae62ef342ca4a2a975",
+      "pluginRuntimeAndMainSkillSha256": "7653472a2fab8f9cafeaa784ce82fbbc62b6d8fb0542f21e90d5a9faf6756fe9"
+    }
+  ],
+  "referenceRatesPerMillion": {
+    "gpt-6-astra": [
+      250,
+      25,
+      1250
+    ],
+    "gpt-5.6-sol": [
+      100,
+      10,
+      500
+    ]
+  },
+  "rateSource": "https://learn.chatgpt.com/docs/pricing#token-rates",
+  "rateMeaning": "Standard-mode reference only, not measured billing or weekly allowance",
+  "limitations": [
+    "One execution each, no randomized order or cache control",
+    "Direct arm explicitly forbids delegation; not a test of automatic task routing",
+    "Main skill loaded by explicit file read, not desktop plugin picker discovery",
+    "Direct run used development bundle and skill; subsequent changes quote YAML frontmatter and refine only tracked-flow behavior",
+    "Both arms pass a fixed bounded test suite; this is not a proof of equivalent quality for all tasks"
+  ]
+}

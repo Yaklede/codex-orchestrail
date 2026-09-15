@@ -1,6 +1,6 @@
 # Orchestrail for OpenDock
 
-Use Sol for implementation and Astra for difficult decisions while staying in one Codex conversation. This dock installs project-local skills, namespaced agent profiles, and the same bundled runtime used by the GitHub Codex plugin.
+Execute directly in the current main model; delegate substantial bounded implementation after decisions are resolved. This dock installs project-local skills, namespaced agent profiles, and the same bundled runtime used by the GitHub Codex plugin.
 
 ## Requirements
 
@@ -14,7 +14,7 @@ After installing the reviewed dock release, open the project in Codex and ask:
 
 > Orchestrail 설정해줘.
 
-Then open a new task, select Sol Medium if desired, and ask:
+Then open a new task, select your main model and reasoning level (Astra is the recommended baseline), and ask:
 
 > Orchestrail로 이 기능 구현하고 테스트해줘.
 

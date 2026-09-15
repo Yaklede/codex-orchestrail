@@ -1,7 +1,7 @@
 {
   "name": "orchestrail",
-  "version": "0.2.0+codex.20260915064414",
-  "description": "One Codex conversation. Sol executes; Astra resolves difficult decisions. Durable plans, evidence, and resumable work.",
+  "version": "0.3.0+codex.20260915084328",
+  "description": "Direct execution by default, selective delegation after decisions, and compact resumable state in one Codex conversation.",
   "author": {
     "name": "Yaklede",
     "url": "https://github.com/Yaklede"
@@ -12,8 +12,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Orchestrail",
-    "shortDescription": "Route coding work to Sol and hard decisions to Astra.",
-    "longDescription": "Work in your existing Codex conversation with role-based model selection, versioned plans, verification evidence, bounded expert assignments, and resumable project state.",
+    "shortDescription": "Execute directly; delegate bounded work when useful.",
+    "longDescription": "Keep the current model in control. Use selective model delegation, compact status, batched state operations and verified completion when durable tracking is needed.",
     "developerName": "Yaklede",
     "category": "Productivity",
     "capabilities": [

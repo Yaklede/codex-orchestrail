@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeUsage, parseExec, parseRollout, sumThreads, weeklyObservation, SUPPORTED_CODEX_VERSION } from '../scripts/benchmark/metrics.mjs';
+import { normalizeUsage, parseExec, parseRollout, sumThreads, transcriptLocations, weeklyObservation, SUPPORTED_CODEX_VERSION } from '../scripts/benchmark/metrics.mjs';
 
 const usage = { input_tokens: 100, cached_input_tokens: 70, output_tokens: 20, reasoning_output_tokens: 8 };
 const line = value => JSON.stringify(value) + '\n';
 const rollout = totals => line({ type: 'session_meta', payload: { id: 'fixture' } }) + totals.map(total => line({ type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: total } } })).join('');
 
 describe('benchmark usage accounting', () => {
+  it('keeps live child and parent transcript owners separate before the child stops', () => {
+    const hooks = [{ event: 'SessionStart', sessionId: 'parent', transcriptPath: '/parent' }, { event: 'SubagentStart', sessionId: 'parent', agentId: 'child', transcriptPath: '/child' }];
+    expect([...transcriptLocations(hooks)]).toEqual([['parent', '/parent'], ['child', '/child']]);
+    hooks.push({ event: 'SubagentStop', sessionId: 'parent', agentId: 'child', transcriptPath: '/parent', agentTranscriptPath: '/child' });
+    expect([...transcriptLocations(hooks)]).toEqual([['parent', '/parent'], ['child', '/child']]);
+  });
   it('does not double count cache or reasoning subsets', () => {
     expect(normalizeUsage(usage)).toMatchObject({ total_tokens: 120, uncached_input_tokens: 30, cache_write_input_tokens: 0 });
     expect(sumThreads([{ threadId: 'parent', usage }, { threadId: 'child', usage }]).total_tokens).toBe(240);
