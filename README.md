@@ -144,6 +144,8 @@ pnpm smoke:harness  # 배정 → 실제 모델 → 결정 → 검증 → 완료
 pnpm smoke:settings # 첫 설정 질문과 이후 자연어 설정 변경
 ```
 
+동일한 작업의 토큰 효율을 비교하는 선택 실행 도구는 [벤치마크 안내](docs/benchmarking.md)에 있습니다. 단일 실행으로 일반적인 절감률을 주장하지 않으며, 메인·하위 에이전트 사용량과 결과 검증을 함께 기록합니다.
+
 참고: [상세 설계](docs/implementation-plan.md) · [현재 구조](docs/architecture.md) · [호환성](docs/compatibility.md) · [기여 안내](CONTRIBUTING.md)
 
 ## 제거

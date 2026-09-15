@@ -1,0 +1,184 @@
+{
+  "date": "2026-09-15",
+  "kind": "pilot",
+  "fixture": "planner",
+  "codexVersion": "codex-cli 0.154.0",
+  "nodeVersion": "22.14.0",
+  "repetitionsPerWorkflow": 1,
+  "executionOrder": [
+    "sol",
+    "astra",
+    "orchestrail"
+  ],
+  "baselineCommit": "68800214591a1e9716f82ad0eb3c9efc1f9b5977",
+  "baselineTree": "010cf59f54622826fd4038b26e7d8e8d4adf85a8",
+  "originalEvaluatorSha256": "aa1737ca68a1d729e2317be25cf427e5e1d439b2e89bd79cb62982f4d8426d7f",
+  "reviewedEvaluatorSha256": "e0a4c23c189c9aecf0273b3ec2f961f3b9600eddc573dbae62ef342ca4a2a975",
+  "runnerSha256": "fc385c916587a5063916a53de8366675040dd5ef67ce87a9520f292b9dcf6c6e",
+  "metricsSha256": "7ee4bc21f4ffaaf762eaa89480eb562fe28451d48baf24e7c371290189356ea4",
+  "pluginBundleSha256": "9fd58428f3fbd34ab16e8e261dd230bcad2b7ca963fdb31a1e14929b4e34de45",
+  "scope": "One routine task; one explicitly requested Builder delegation in the harness arm. No forced expert. Not an automatic routing benchmark.",
+  "accountObservation": {
+    "displayedIncreasePercentagePoints": 1,
+    "scope": "Preparation, pilot and concurrent parent conversation; not isolated per-run charging",
+    "conversionToWeeklyPercentEstablished": false
+  },
+  "workflows": [
+    {
+      "mode": "sol",
+      "rootModel": "gpt-5.6-sol",
+      "rootEffort": "high",
+      "durationSeconds": 196.137,
+      "originalEvaluation": {
+        "tests": 38,
+        "passed": 38
+      },
+      "reviewedEvaluation": {
+        "tests": 39,
+        "pass": 38,
+        "fail": 1
+      },
+      "usage": {
+        "input_tokens": 130949,
+        "cached_input_tokens": 115072,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 5179,
+        "reasoning_output_tokens": 2604,
+        "total_tokens": 136128,
+        "uncached_input_tokens": 15877
+      },
+      "threads": [
+        {
+          "kind": "parent",
+          "model": "gpt-5.6-sol",
+          "usage": {
+            "input_tokens": 130949,
+            "cached_input_tokens": 115072,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 5179,
+            "reasoning_output_tokens": 2604,
+            "total_tokens": 136128,
+            "uncached_input_tokens": 15877
+          }
+        }
+      ],
+      "parentShellCommands": 4,
+      "harnessCompleted": null,
+      "measurementSource": "codex-exec-json + experimental version-pinned per-thread rollout audit"
+    },
+    {
+      "mode": "astra",
+      "rootModel": "gpt-6-astra",
+      "rootEffort": "high",
+      "durationSeconds": 107.232,
+      "originalEvaluation": {
+        "tests": 38,
+        "passed": 38
+      },
+      "reviewedEvaluation": {
+        "tests": 39,
+        "pass": 39,
+        "fail": 0
+      },
+      "usage": {
+        "input_tokens": 89547,
+        "cached_input_tokens": 68736,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 2638,
+        "reasoning_output_tokens": 101,
+        "total_tokens": 92185,
+        "uncached_input_tokens": 20811
+      },
+      "threads": [
+        {
+          "kind": "parent",
+          "model": "gpt-6-astra",
+          "usage": {
+            "input_tokens": 89547,
+            "cached_input_tokens": 68736,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2638,
+            "reasoning_output_tokens": 101,
+            "total_tokens": 92185,
+            "uncached_input_tokens": 20811
+          }
+        }
+      ],
+      "parentShellCommands": 6,
+      "harnessCompleted": null,
+      "measurementSource": "codex-exec-json + experimental version-pinned per-thread rollout audit"
+    },
+    {
+      "mode": "orchestrail",
+      "rootModel": "gpt-5.6-sol",
+      "rootEffort": "medium",
+      "durationSeconds": 352.732,
+      "originalEvaluation": {
+        "tests": 38,
+        "passed": 38
+      },
+      "reviewedEvaluation": {
+        "tests": 39,
+        "pass": 38,
+        "fail": 1
+      },
+      "usage": {
+        "input_tokens": 1159689,
+        "cached_input_tokens": 1043584,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 11457,
+        "reasoning_output_tokens": 2393,
+        "total_tokens": 1171146,
+        "uncached_input_tokens": 116105
+      },
+      "threads": [
+        {
+          "kind": "parent",
+          "model": "gpt-5.6-sol",
+          "usage": {
+            "input_tokens": 1027019,
+            "cached_input_tokens": 940160,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 7505,
+            "reasoning_output_tokens": 1260,
+            "total_tokens": 1034524,
+            "uncached_input_tokens": 86859
+          }
+        },
+        {
+          "kind": "child",
+          "model": "gpt-5.6-sol",
+          "usage": {
+            "input_tokens": 132670,
+            "cached_input_tokens": 103424,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 3952,
+            "reasoning_output_tokens": 1133,
+            "total_tokens": 136622,
+            "uncached_input_tokens": 29246
+          }
+        }
+      ],
+      "parentShellCommands": 22,
+      "harnessCompleted": true,
+      "measurementSource": "codex-exec-json + experimental version-pinned per-thread rollout audit"
+    }
+  ],
+  "descriptiveRatios": {
+    "harnessOverSolRawTokens": 8.603270451339915,
+    "harnessOverAstraRawTokens": 12.704301133590063,
+    "harnessParentShare": 0.8833433235480461,
+    "successfulQualityMatchedSavingsPercent": null
+  },
+  "observedTotalTokens": 1399459,
+  "sameFixture27ExecutionArithmeticTokens": 12595131,
+  "limitations": [
+    "One task and one sample per workflow; no statistical savings estimate.",
+    "Root efforts differ between baseline and harness as part of the configured workflow.",
+    "Order was not randomized and server cache behavior was not controlled.",
+    "Original 38 tests missed an existing requirement. The 39th test was added after source review and all outputs were regraded without model retries.",
+    "Parent and child accounting uses a benchmark-only version-pinned experimental transcript audit.",
+    "Raw token totals are not billable tokens, API cost or subscription usage.",
+    "A 27-run arithmetic projection assumes nine identical copies of this triplet; it is not a forecast for three different tasks."
+  ]
+}
