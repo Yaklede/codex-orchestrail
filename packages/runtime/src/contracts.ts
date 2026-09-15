@@ -4,7 +4,7 @@ export const id = z.string().min(1).max(160).regex(/^[a-zA-Z0-9_.:-]+$/);
 const text = z.string().min(1).max(16000);
 export const Role = z.enum(['scout', 'builder', 'reviewer', 'expert']);
 export type Role = z.infer<typeof Role>;
-const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+export const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 export const Config = z.object({
   schemaVersion: z.literal(1).default(1),
   models: z.object({
@@ -21,6 +21,20 @@ export const Config = z.object({
   }).default({ expertAssignments: 3, replans: 2, failedFixAttempts: 2, packetChars: 16000 }),
 }).strict();
 export type Config = z.infer<typeof Config>;
+
+const ModelPatch = z.object({ model: text.optional(), effort: Effort.optional() }).strict();
+export const SettingsInput = z.object({
+  preset: z.enum(['balanced', 'all-medium', 'all-high']).optional(),
+  models: z.object({ scout: ModelPatch.optional(), builder: ModelPatch.optional(), reviewer: ModelPatch.optional(), expert: ModelPatch.optional() }).strict().optional(),
+  limits: z.object({
+    expertAssignments: z.number().int().min(0).max(100).optional(),
+    replans: z.number().int().min(0).max(20).optional(),
+    failedFixAttempts: z.number().int().min(1).max(10).optional(),
+    packetChars: z.number().int().min(2000).max(100000).optional(),
+  }).strict().optional(),
+  expectedConfigHash: z.string().min(1).optional(),
+}).strict();
+export type SettingsInput = z.infer<typeof SettingsInput>;
 
 export const Criterion = z.object({ id, description: text }).strict();
 export const Plan = z.object({

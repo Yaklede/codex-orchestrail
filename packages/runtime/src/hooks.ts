@@ -51,16 +51,22 @@ export async function handleHook(store: Store, raw: unknown): Promise<unknown> {
       // Some hosts expose an opaque message in hooks. task_name stays visible and is unique per reservation.
       const target = input.target ?? input.id ?? input.agent_id;
       const a = run.assignments.find(a => a.id === marker || a.taskName === input.task_name)
-        ?? (messaging(tool) && !marker ? run.assignments.find(a => a.status === 'reserved' && run.assignments.some(previous => previous.id !== a.id && previous.role === a.role && previous.model === a.model && (previous.nativeAgentId === target || previous.nativeTaskName === target))) : undefined);
+        ?? (messaging(tool) && !marker ? run.assignments.find(a => a.status === 'reserved' && run.assignments.some(previous => previous.id !== a.id && previous.role === a.role && previous.model === a.model && previous.effort === a.effort && (previous.nativeAgentId === target || previous.nativeTaskName === target))) : undefined);
       ensure(a && a.status === 'reserved', 'RESERVATION_REQUIRED', 'Reserve an assignment, use its returned taskName as task_name, and include [orchestrail:assignment-id] in the message.');
       const explicitModel = input.model;
       const profile = input.agent_type ?? input.agentType;
       ensure(messaging(tool) || explicitModel === a.model || (explicitModel === undefined && profile === `orchestrail-${a.role}`), 'MODEL_MISMATCH', `Use model ${a.model} with effort ${a.effort}, or profile orchestrail-${a.role}.`);
       ensure(explicitModel === undefined || explicitModel === a.model, 'MODEL_MISMATCH', `Expected ${a.model}.`);
       const effort = input.reasoning_effort ?? input.reasoningEffort ?? input.effort;
-      ensure(effort === undefined || effort === a.effort, 'EFFORT_MISMATCH', `Expected ${a.effort} reasoning.`);
+      ensure((effort === undefined && (messaging(tool) || explicitModel === undefined)) || effort === a.effort, 'EFFORT_MISMATCH', `Pass the assigned ${a.effort} reasoning explicitly with the model.`);
+      if (spawning(tool) && explicitModel === undefined) {
+        const currentModel = (await store.config()).models[a.role];
+        ensure(currentModel.model === a.model && currentModel.effort === a.effort, 'PROFILE_CHANGED', 'This reservation predates the profile change. Pass its original model/effort explicitly.');
+      }
       if (messaging(tool)) {
-        ensure(typeof target === 'string' && run.assignments.some(previous => (previous.nativeAgentId === target || previous.nativeTaskName === target) && previous.role === a.role), 'TARGET_MISMATCH', 'Bind and use the native agent ID or canonical task name for the same role.');
+        const previous = run.assignments.find(previous => previous.id !== a.id && (previous.nativeAgentId === target || previous.nativeTaskName === target));
+        ensure(typeof target === 'string' && previous?.role === a.role, 'TARGET_MISMATCH', 'Bind and use the native agent ID or canonical task name for the same role.');
+        ensure(previous.model === a.model && previous.effort === a.effort, 'FRESH_AGENT_REQUIRED', 'The model or effort changed. Spawn a fresh agent with the new assignment settings.');
       }
       await store.mutate(type, s => {
         const r = getRun(s, event.session_id); const current = r.assignments.find(x => x.id === a.id)!;

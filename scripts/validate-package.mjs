@@ -9,7 +9,7 @@ const catalog = JSON.parse(await fs.readFile('.agents/plugins/marketplace.json',
 assert.equal(manifest.name, 'orchestrail');
 assert.equal(catalog.name, 'orchestrail');
 assert.equal(catalog.plugins[0].source.path, './plugins/orchestrail');
-assert.equal(manifest.version, JSON.parse(await fs.readFile('package.json', 'utf8')).version);
+assert.equal(manifest.version.split('+')[0], JSON.parse(await fs.readFile('package.json', 'utf8')).version);
 for (const name of ['orchestrail', 'orchestrail-setup', 'orchestrail-status', 'orchestrail-resume']) {
   const file = path.join(root, 'skills', name, 'SKILL.md');
   const content = await fs.readFile(file, 'utf8');

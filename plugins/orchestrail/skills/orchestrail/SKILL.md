@@ -9,7 +9,9 @@ Keep the user in the current conversation. Codex runs the agents; the bundled he
 
 ## Start or continue
 
-Resolve `../../scripts/orchestrail.mjs` relative to this skill directory into an absolute path (RUNTIME below). Call `node RUNTIME doctor --project PROJECT`. If setup is missing, use the bundled setup workflow. Do not change the current root model or user login settings. Sol Medium is the recommended root; preserve an explicit user choice.
+Resolve `../../scripts/orchestrail.mjs` relative to this skill directory into an absolute path (RUNTIME below). Call `node RUNTIME doctor --project PROJECT`. If setup is missing, read [the setup skill](../orchestrail-setup/SKILL.md) and obtain the user's reasoning preferences before saving configuration; an explicit preference already given in this conversation is sufficient. Do not change the current root model or user login settings. Sol Medium is the recommended root; preserve an explicit user choice.
+
+When the user changes a role's model or reasoning level, follow the setup skill's configuration-change workflow. Apply only the requested settings and retain the current task. Read the model/effort returned by each new assignment instead of reusing an old configuration table. Existing assignments keep their parameters; a different model or effort requires a fresh native agent.
 
 Use the native session ID supplied by the Orchestrail hook, or `CODEX_THREAD_ID` if the host supplies it. Pass `--session ID` on helper calls. If neither exists, `start` creates a manual session; retain its returned ID and explain that automatic session binding is unavailable. Never select another active run merely because it shares a directory.
 
@@ -23,7 +25,7 @@ Use the runtime `route` operation with evidence about the task. Default to Sol f
 
 If the native tool accepts `task_name`, set it to the assignment's returned `taskName`. Some Codex hosts expose opaque message text to hooks; this stable name lets the hook match the reservation. The parent can prepare verification, inspect adjacent constraints, or organize the next decision while the child works. Keep one assignment active at a time in this initial version. Small obvious changes may be handled by the root directly. Never spawn via another runtime, recursively delegate, or use another user's project to create parallel work.
 
-After spawn, record its native ID with `bind` if hooks did not capture it. When the tool returns a canonical task name such as `/root/orchestrail_…`, bind `nativeTaskName` and use that target for native messages/waits. A follow-up to a finished agent is a new assignment: reserve it, include the new marker, and use the same role/model. Wait for the required result before advancing dependent work. Fresh contexts are preferred for new expert decisions.
+After spawn, record its native ID with `bind` if hooks did not capture it. When the tool returns a canonical task name such as `/root/orchestrail_…`, bind `nativeTaskName` and use that target for native messages/waits. A follow-up to a finished agent is a new assignment: reserve it, include the new marker, and reuse that agent only if its role, model and effort still match. Wait for the required result before advancing dependent work. Fresh contexts are preferred for new expert decisions. After configuration changes, prefer explicit model/effort parameters; named profiles may require a new task to reload.
 
 ## Verify and continue
 

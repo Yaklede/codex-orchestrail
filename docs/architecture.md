@@ -1,6 +1,6 @@
 # Current architecture
 
-Orchestrail 0.1.0 runs inside the user's existing Codex conversation. Native Codex owns model execution and authorization. The bundled Node helper owns local records and validates transitions; it does not call an API, spawn models, or maintain a separate scheduler.
+Orchestrail 0.2.0 runs inside the user's existing Codex conversation. Native Codex owns model execution and authorization. The bundled Node helper owns local records and validates transitions; it does not call an API, spawn models, or maintain a separate scheduler.
 
 ## Components
 
@@ -14,6 +14,15 @@ Orchestrail 0.1.0 runs inside the user's existing Codex conversation. Native Cod
 | Files | `packages/runtime/src/files.ts` | Fingerprints, atomic writes, locks, path ownership checks |
 | Host adapter | `packages/runtime/src/hooks.ts` | Session context, native delegation checks and observations |
 | Installer | `packages/runtime/src/install.ts` | Project profile setup, conflict detection, doctor and removal |
+| Preferences | `packages/runtime/src/settings.ts` | Read-only configuration, effort presets and partial role updates |
+
+## User-selected configuration
+
+The first setup requires a selected preset or role model/effort. With no selection it returns a preference prompt payload and creates no configuration. The skill asks the user; an already explicit preference is sufficient. An existing project's setup without changes retains saved values.
+
+`configure` merges only requested fields, optionally checks `expectedConfigHash`, and updates the settings and corresponding profile header fields under the checkout lock. It preflights profile formats before writing and attempts to restore prior files on caught I/O failures. Other profile instructions/comments and ownership are retained. A process crash across multiple file writes may still require reconciliation.
+
+Assignments capture model and effort at reservation. Configuration changes leave those records intact; new reservations read the latest configuration inside the same lock used for updates. A follow-up cannot reuse a native agent with a different model or effort. A reservation created before a profile change must use its original explicit parameters rather than the changed named profile. Main conversation settings remain host-controlled.
 
 ## State and invariants
 

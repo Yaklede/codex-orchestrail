@@ -2,11 +2,13 @@
 
 Use Node 22+ and the bundled `scripts/orchestrail.mjs`. Resolve its absolute path from the invoking skill. The helper operates on an existing Git checkout, including an unborn repository.
 
+For first-run preference selection or later model/reasoning changes, use [the settings protocol](settings.md): `config`, `setup` with a user choice, and `configure` with a partial update. These operations do not require a selected run.
+
 ```bash
 node /resolved/plugin/scripts/orchestrail.mjs ACTION --project /project --session SESSION --input /project/.orchestrail/request.json
 ```
 
-Write the JSON request with a file tool. Avoid embedding user text in shell commands. All operations emit JSON; failures use stderr and exit 1. Hooks use the host's JSON output schema. `setup`, `doctor`, `status`, and `fingerprint` need no request. `status` without a session lists runs; never assume the first run is the active one.
+Write the JSON request with a file tool. Avoid embedding user text in shell commands. All operations emit JSON; failures use stderr and exit 1. Hooks use the host's JSON output schema. `config`, `doctor`, `status`, and `fingerprint` need no request. First setup requires a user-selected preset or model/effort. `status` without a session lists runs; never assume the first run is the active one.
 
 Most requests may include `runId` and `expectedRevision`. The latter rejects stale updates. Native IDs come from hooks or actual tool results, not invented identifiers. A manual session is supported when hooks are unavailable.
 

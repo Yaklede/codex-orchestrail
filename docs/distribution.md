@@ -11,9 +11,9 @@ codex plugin marketplace add Yaklede/codex-orchestrail --ref main
 codex plugin add orchestrail@orchestrail
 ```
 
-For a versioned install, choose a published tag using `--ref v0.1.0`. Do not present an unpublished tag as available.
+For a versioned install, choose a published tag using `--ref v0.2.0`. Do not present an unpublished tag as available.
 
-To prepare a release, align `package.json` and `.codex-plugin/plugin.json` versions, run `pnpm package`, and include the regenerated bundle in the reviewed commit. The release workflow runs when a matching `v*` tag is pushed; it checks the version and creates a GitHub release with both archives and `SHA256SUMS`. Creating local packages does not push commits or tags. No official OpenAI directory submission is part of this release path.
+To prepare a release, align `package.json` and the base version of `.codex-plugin/plugin.json`, run `pnpm package`, and include the regenerated bundle in the reviewed commit. A `+codex.…` build metadata suffix distinguishes local plugin cache updates without changing the runtime version. The release workflow runs when a matching `v*` tag is pushed; it checks the version and creates a GitHub release with both archives and `SHA256SUMS`. Creating local packages does not push commits or tags. No official OpenAI directory submission is part of this release path.
 
 ## Local development
 
@@ -38,7 +38,7 @@ The [OpenDock manifest guide](https://opendock.app/docs/?lang=ko&theme=dark) doc
 When you are ready to publish, authenticate with OpenDock and replace `YOUR_OWNER` with a namespace you control. From the generated package root, a submission command has this form:
 
 ```bash
-opendock deploy YOUR_OWNER/orchestrail@0.1.0 --file dock.yml --platform macos
+opendock deploy YOUR_OWNER/orchestrail@0.2.0 --file dock.yml --platform macos
 ```
 
 Submit for Linux separately after validating that target. Do not claim Windows support from a macOS test. Publishing is separate from preparation and may require review. The GitHub owner name does not establish an OpenDock namespace. No registry credentials are stored in this repository and CI does not submit to OpenDock.

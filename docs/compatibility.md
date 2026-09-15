@@ -9,9 +9,11 @@ Verified locally on **2026-09-15**, macOS, Node **22.14.0**, Codex CLI **0.154.0
 | Native Sol and Astra execution | Passed | Separate fresh-context native subagents, actual model slugs observed in SubagentStart |
 | Full harness with real models | Passed | Sol scout → Astra expert → KEEP_PLAN → command verification → completed local run; both observed models matched requests |
 | Real host tool shape | Covered | `collaborationspawn_agent`, opaque message, visible task_name, canonical task response and agent_type default |
-| Runtime and package behavior | 24 tests passed | Routing, plans, evidence freshness, failed fixes, limits, interruption, writer ownership, journal recovery, native adapter and standalone package installation |
+| Runtime and package behavior | 37 tests passed | Routing, plans, evidence freshness, failed fixes, limits, interruption, writer ownership, journal recovery, preference onboarding/updates, native adapter and standalone package installation |
 | Plugin manifest | Passed | Codex plugin-creator validator, repo marketplace and bundled entrypoint validation |
 | Local Codex installation | Passed | Repo marketplace registration and plugin add; installed bundle matched the source bundle; all four skills appeared in `codex debug prompt-input` |
+| GitHub CI for the initial implementation | Passed | Linux and macOS checks for commit `0b86d8b`; subsequent commits have their own CI results |
+| Preference skill in real Codex conversations | Passed | First setup asked before saving; a later natural-language request changed Builder to medium and Expert to Sol/max while preserving Scout/Reviewer |
 | OpenDock manifest | Passed | Installed 0.2.0 parser and task-command validation for macOS/Linux |
 | OpenDock file lifecycle | Passed | Its installed collector/planner in a disposable Git fixture; setup doctor ready; update ownership validated; uninstall preserved existing AGENTS.md and local state |
 | OpenDock registry review/public install | Not performed | Payload prepared only; no authentication or deploy request |
@@ -28,6 +30,8 @@ The tested host exposed explicit model and effort parameters on native delegatio
 
 Desktop skill picker behavior and a complete production onboarding flow require a fresh task after installation. No cost-saving percentage, hard spending cap, transcript compatibility, unattended scheduling, Windows support, or full tool interception is claimed.
 
+The initial preference-skill smoke correctly asked for a choice before creating configuration. Its first update attempt under the default workspace sandbox was blocked with `EPERM` for `.codex/agents`, and rollback retained the prior settings. Those directories are protected in the [default writable-root policy](https://learn.chatgpt.com/docs/agent-approvals-security#protected-paths-in-writable-roots). With explicit `--add-dir` access to only the disposable fixture's `.codex` directory, both preference scenarios passed. User-facing setup uses the host's normal permission flow if required; it does not bypass the sandbox or report a blocked update as applied. This smoke verifies the saved configuration and profiles, not execution of every supported effort level.
+
 ## Reproduce
 
 ```bash
@@ -35,9 +39,10 @@ pnpm check
 pnpm package
 pnpm smoke:native
 pnpm smoke:harness
+pnpm smoke:settings
 ```
 
-The two smoke commands are optional, make real model calls and consume Codex usage. Each prints the temporary fixture location and a JSON result, saves event/output evidence locally, and archives its test task. They are excluded from CI.
+The smoke commands are optional, make real model calls and consume Codex usage. Each prints the temporary fixture location and saves its output locally. Native-agent tests archive their test task; the preference-skill check uses ephemeral tasks. They are excluded from CI.
 
 OpenDock's local validation used a temporary copy of the installed JavaScript CLI bundle to call its manifest parser and file collector/planner without invoking a registry command. This exercises local installation semantics; it is not a public `opendock validate` command or registry acceptance guarantee. The regular package tests validate the generated payload and exercise the standalone helper without depending on OpenDock being installed.
 

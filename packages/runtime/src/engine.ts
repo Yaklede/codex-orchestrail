@@ -147,7 +147,7 @@ export async function execute(store: Store, action: string, raw: Record<string, 
     });
   }
   const currentCode = ['start', 'evidence', 'complete', 'resume', 'revise'].includes(action) ? await fingerprint(store.project) : undefined;
-  return store.mutate(action, state => {
+  return store.mutate(action, async state => {
     if (action === 'start') {
       const request = z.object({ goal: z.string().min(1).max(16000), constraints: z.array(z.string()).default([]), criteria: z.array(Criterion).min(1) }).strict().parse(input);
       ensure(new Set(request.criteria.map(c => c.id)).size === request.criteria.length, 'DUPLICATE_CRITERION', 'Criterion IDs must be unique.');
@@ -187,9 +187,9 @@ export async function execute(store: Store, action: string, raw: Record<string, 
       Object.assign(run, request, { taskRevision: run.taskRevision + 1, status: 'active', baseline: currentCode! }); delete run.route; delete run.pauseReason; touch(run); return run;
     }
     active(run);
-    if (action === 'route') { run.route = chooseRoute(run, input, config); if (!run.route.role) { run.status = 'waiting_for_input'; run.pauseReason = run.route.environmentBlocker; } touch(run); return run.route; }
+    if (action === 'route') { run.route = chooseRoute(run, input, await store.config()); if (!run.route.role) { run.status = 'waiting_for_input'; run.pauseReason = run.route.environmentBlocker; } touch(run); return run.route; }
     if (action === 'plan') return addPlan(run, input);
-    if (action === 'assign') return reserve(run, state, config, input);
+    if (action === 'assign') return reserve(run, state, await store.config(), input);
     if (action === 'bind') {
       const request = z.object({ assignmentId: id, nativeAgentId: id.optional(), nativeTaskName: z.string().min(1).max(500).optional(), actualModel: z.string().optional() }).strict().parse(input);
       ensure(request.nativeAgentId || request.nativeTaskName, 'AGENT_ID_REQUIRED', 'Provide the actual native agent ID or canonical task name from the tool response.');

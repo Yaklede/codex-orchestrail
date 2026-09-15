@@ -30,7 +30,11 @@ test('the copied plugin works without source files or node_modules and with spac
   const runtime = path.join(plugin, 'scripts/orchestrail.mjs');
   const version = JSON.parse(await fs.readFile('package.json', 'utf8')).version;
   expect((await exec(process.execPath, [runtime, '--version'])).stdout.trim()).toBe(version);
-  expect(await cli(runtime, project, 'setup')).toMatchObject({ installed: true });
+  expect(await cli(runtime, project, 'setup')).toMatchObject({ installed: false, needsPreferences: true });
+  expect(await cli(runtime, project, 'setup', { preset: 'all-medium' })).toMatchObject({ installed: true });
+  const settings = await cli(runtime, project, 'config');
+  expect(settings.config.models.expert.effort).toBe('medium');
+  expect(await cli(runtime, project, 'configure', { models: { expert: { effort: 'max' } }, expectedConfigHash: settings.configHash })).toMatchObject({ changedRoles: ['expert'], config: { models: { expert: { effort: 'max' } } } });
   expect(await cli(runtime, project, 'doctor')).toMatchObject({ ready: true, version });
   const run = await cli(runtime, project, 'start', { goal: 'Read a packaged fixture', criteria: [{ id: 'AC-1', description: 'Fixture works' }] });
   expect(run.sessionId).toBe('bundle-session');
@@ -64,7 +68,8 @@ test('OpenDock maps a standalone project workflow with valid skill references an
     expect(await fs.readFile(target, 'utf8')).toContain(`name: ${name}`);
   }
   const runtime = path.join(project, '.codex/orchestrail/scripts/orchestrail.mjs');
-  expect(await cli(runtime, project, 'setup')).toMatchObject({ installed: true, changed: [] });
+  expect(await cli(runtime, project, 'setup', { preset: 'all-high' })).toMatchObject({ installed: true, changed: ['.codex/agents/orchestrail-scout.toml'] });
+  expect(await cli(runtime, project, 'configure', { models: { expert: { effort: 'max' } } })).toMatchObject({ configured: true });
   expect(await cli(runtime, project, 'doctor')).toMatchObject({ ready: true });
   expect(await cli(runtime, project, 'uninstall')).toMatchObject({ removed: [], stateRetained: true });
   expect(await fs.readFile(path.join(project, '.codex/hooks.json'), 'utf8')).toBe(sharedHooks);

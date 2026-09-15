@@ -17,7 +17,7 @@ async function fixture() {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'orchestrail test '))); roots.push(root);
   await exec('git', ['init', '-q', '-b', 'main', root]);
   await fs.writeFile(path.join(root, 'value.txt'), 'initial');
-  await setup(root, plugin);
+  await setup(root, plugin, { preset: 'balanced' });
   const store = new Store(root);
   const call = (action: string, input: Record<string, unknown> = {}, session = 'session-1') => execute(store, action, input, session);
   await call('start', { goal: 'Implement feature', criteria });
@@ -217,7 +217,7 @@ describe('native hook contracts', () => {
   });
   test('unreserved/wrong-model spawn is denied; repeated valid delivery is idempotent', async () => {
     const { root, store, call, run } = await fixture();
-    const event = { hook_event_name: 'PreToolUse', session_id: 'session-1', cwd: root, turn_id: 'turn-1', tool_name: 'spawn_agent', tool_use_id: 'call-1', tool_input: { message: 'Work', model: 'gpt-5.6-sol' } };
+    const event = { hook_event_name: 'PreToolUse', session_id: 'session-1', cwd: root, turn_id: 'turn-1', tool_name: 'spawn_agent', tool_use_id: 'call-1', tool_input: { message: 'Work', model: 'gpt-5.6-sol', reasoning_effort: 'high' } };
     expect(await handleHook(store, event)).toHaveProperty('hookSpecificOutput.permissionDecision', 'deny');
     const a = await call('assign', { role: 'builder', objective: 'Write', stepId: 'step-1' }) as any;
     event.tool_input.message = `[orchestrail:${a.id}] Work`;

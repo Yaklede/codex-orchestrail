@@ -1,6 +1,6 @@
 {
   "name": "codex-orchestrail",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.5.0",
@@ -15,7 +15,8 @@
     "package:opendock": "pnpm build && node scripts/prepare-opendock.mjs",
     "package": "pnpm check && node scripts/package.mjs",
     "smoke:native": "node scripts/smoke-native.mjs",
-    "smoke:harness": "pnpm build && node scripts/smoke-harness.mjs"
+    "smoke:harness": "pnpm build && node scripts/smoke-harness.mjs",
+    "smoke:settings": "pnpm build && node scripts/smoke-settings.mjs"
   },
   "dependencies": {
     "zod": "^4.6.5"

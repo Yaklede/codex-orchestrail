@@ -1,6 +1,6 @@
 {
   "name": "orchestrail",
-  "version": "0.1.0",
+  "version": "0.2.0+codex.20260915064414",
   "description": "One Codex conversation. Sol executes; Astra resolves difficult decisions. Durable plans, evidence, and resumable work.",
   "author": {
     "name": "Yaklede",
@@ -16,7 +16,14 @@
     "longDescription": "Work in your existing Codex conversation with role-based model selection, versioned plans, verification evidence, bounded expert assignments, and resumable project state.",
     "developerName": "Yaklede",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"],
-    "defaultPrompt": ["Set up Orchestrail in this project.", "Use Orchestrail to implement and verify this task.", "Show my Orchestrail progress."]
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Set up Orchestrail in this project.",
+      "Use Orchestrail to implement and verify this task.",
+      "Show my Orchestrail progress."
+    ]
   }
 }

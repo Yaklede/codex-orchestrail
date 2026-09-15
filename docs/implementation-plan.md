@@ -1,7 +1,7 @@
 # Orchestrail 구현 계획
 
 - 작성일: 2026-09-15
-- 상태: 0.1.0 초기 구현 및 로컬 검증 완료, 공개 게시 전
+- 상태: 0.2.0 설정 선택·변경 기능 구현, GitHub 소스 배포 및 OpenDock 제출 준비
 - 대상 저장소: `Yaklede/codex-orchestrail`
 
 ## 구현 결과와 설계에서 달라진 점
@@ -9,6 +9,7 @@
 이 문서는 착수 시 세운 상세 계획을 보존한다. 현재 사용법은 [README](../README.md), 실제 구현 구조는 [architecture.md](architecture.md), 검증 범위는 [compatibility.md](compatibility.md)가 기준이다. 아래 단계별 완료 기준에는 향후 앱 온보딩 검증과 공개 게시도 포함되어 있으며, 모든 후보 기능을 이미 구현했다는 뜻은 아니다.
 
 - **구현:** 네 가지 스킬/역할, Sol/Astra 라우팅, 버전 계획·결정, 검증 근거, 반복 수정 실패 집계, 배정 한도, 중단/취소/재개, 설치 소유권 관리, 훅 어댑터.
+- **0.2.0 설정:** 최초 setup에서 사용자의 추론 수준 선택을 받고, 이후 자연어 요청으로 역할별 모델·추론을 변경한다. 변경은 새 배정부터 적용하며 기존 배정·기록은 유지한다. 실제 요청 형식은 [설정 프로토콜](../plugins/orchestrail/references/settings.md)을 따른다.
 - **실모델 확인:** Codex CLI 0.154.0에서 Sol 탐색 → Astra 판단 → 검증 → completed를 통과했다. 요청 모델과 SubagentStart의 관측 모델을 대조했다.
 - **단순화:** 상태는 checkout별 `events.jsonl`과 `snapshot.json`에 함께 보관한다. 별도 per-run 디렉터리·RepositoryBrief·Artifact DB·projectId 계층은 만들지 않았다.
 - **훅:** 네이티브 도구 별칭과 불투명한 메시지 payload에 대응하도록 고유 taskName을 사용한다. 루트 Stop은 경고만 제공한다. 압축 복구는 SessionStart의 compact 이벤트와 기존 기록으로 처리한다.

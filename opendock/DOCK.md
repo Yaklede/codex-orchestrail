@@ -18,7 +18,9 @@ Then open a new task, select Sol Medium if desired, and ask:
 
 > Orchestrail로 이 기능 구현하고 테스트해줘.
 
-The setup skill initializes `.orchestrail/`. Continue in the same conversation; plans, decisions, results and verification evidence remain local. Existing model preferences can be changed in `.orchestrail/config.json`, followed by setup.
+The setup skill first asks for the subagent reasoning preferences, then initializes `.orchestrail/` with the user's choice. If preferences were already specified, it applies them without asking again. Continue in the same conversation; plans, decisions, results and verification evidence remain local.
+
+You can later ask “Builder는 medium으로”, “Expert는 Astra max로”, or request another role model. Only the requested fields change, starting with new assignments; existing agents keep their original settings. Profile comments and custom instructions are preserved. Repeating setup without a change request retains the saved preferences.
 
 ## Difference from the Codex plugin distribution
 

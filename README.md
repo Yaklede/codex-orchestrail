@@ -4,7 +4,7 @@
 
 Orchestrail은 모델 배정 규칙, 네 가지 역할 프로필, 버전이 있는 계획, 검증 근거, 재개 가능한 로컬 상태를 제공하는 Codex 플러그인입니다. 모델 실행과 로그인은 Codex가 담당하며, 별도 API 키나 서버가 필요하지 않습니다.
 
-현재 버전은 **0.1.0 초기 버전**입니다. GitHub 배포 파일과 OpenDock 제출 패키지를 만들 수 있습니다. 패키지 생성은 저장소 공개나 레지스트리 게시를 실행하지 않습니다. 확인한 범위는 [호환성 보고서](docs/compatibility.md)를 참고하세요.
+현재 버전은 **0.2.0 초기 버전**입니다. GitHub 배포 파일과 OpenDock 제출 패키지를 만들 수 있습니다. 패키지 생성은 저장소 공개나 레지스트리 게시를 실행하지 않습니다. 확인한 범위는 [호환성 보고서](docs/compatibility.md)를 참고하세요.
 
 ## 설치해서 사용하기
 
@@ -30,7 +30,7 @@ codex plugin add orchestrail@orchestrail
 
 ### 사용할 프로젝트에서
 
-1. 프로젝트를 Codex에서 열고 새 작업에서 **“Orchestrail 설정해줘”**라고 요청합니다. 스킬 선택기에서는 `orchestrail-setup`을 선택할 수 있습니다.
+1. 프로젝트를 Codex에서 열고 새 작업에서 **“Orchestrail 설정해줘”**라고 요청합니다. 처음에는 하위 에이전트의 추론 수준을 묻습니다. 기본 혼합(Scout medium, 나머지 high), 모두 high, 직접 지정 중에서 선택하거나 원하는 설정을 말하세요. 이미 “모두 xhigh로 설정해줘”처럼 지정했다면 다시 묻지 않습니다. 스킬 선택기에서는 `orchestrail-setup`을 선택할 수 있습니다.
 2. Codex에서 번들 훅을 검토하고 신뢰합니다. CLI는 `/hooks`에서 확인하세요. 설치와 훅 신뢰는 별개입니다.
 3. 새 작업을 열어 프로젝트 프로필을 읽게 합니다. 메인 모델은 **Sol / medium**을 권장합니다. 플러그인은 현재 메인 모델을 자동 변경하지 않습니다.
 4. **“Orchestrail로 이 기능 구현하고 테스트해줘”**라고 요청하고, 같은 대화에서 수정·배포·상태 확인을 이어갑니다.
@@ -89,9 +89,23 @@ flowchart LR
 
 **“Orchestrail 상태 보여줘”**, **“이전 Orchestrail 작업 이어서 해줘”**로 조회·재개할 수 있습니다. 새 대화에서는 이어갈 run을 선택합니다. 같은 폴더라는 이유로 다른 대화의 작업을 자동 선택하지 않습니다. 취소된 run은 재개하지 않고 새로 시작합니다.
 
-설정 변경은 `.orchestrail/config.json`의 `models`와 `limits`를 수정한 뒤 setup을 다시 실행합니다. 기본 한도는 Expert 배정 3회, 전체 계획 재작성 2회입니다. 이는 **배정 횟수 한도**이며 토큰이나 청구액의 상한이 아닙니다. 사용량에는 요청 모델과 실제 관측 모델을 구분하며, 관측하지 못한 토큰·비용은 `null`로 표시합니다.
+설정 이후에도 같은 대화에서 변경을 요청할 수 있습니다.
 
-사용자가 수정한 에이전트 파일은 덮어쓰지 않습니다. 충돌을 확인하고 정리한 후 setup을 다시 실행하세요. 상태에는 작업 설명과 제한된 명령 출력이 저장됩니다. 출력의 흔한 비밀값 패턴을 가리지만 완전한 비밀정보 탐지기는 아니므로 실행 기록을 공개 저장소에 올리지 마세요.
+> Orchestrail Builder의 추론 수준을 medium으로 바꿔줘.
+>
+> Expert는 Astra max로 바꿔줘.
+>
+> Expert 모델을 Sol로 바꾸고 추론 수준은 high로 해줘.
+>
+> 현재 역할별 모델과 추론 설정 보여줘.
+
+선택은 프로젝트의 `.orchestrail/config.json`과 프로필에 저장됩니다. 요청한 항목만 수정하며 다른 역할, 한도, 작업 기록과 사용자 지침은 유지합니다. 변경은 **새 배정부터 적용**됩니다. 이미 예약하거나 실행한 에이전트는 원래 설정을 유지하고, 모델이나 추론 수준이 달라지면 새 에이전트를 사용합니다. 메인 대화의 설정은 Codex에서 별도로 선택합니다. 지원되는 모델과 추론 수준은 현재 호스트의 가용 목록을 따릅니다.
+
+기존 설정이 있는 프로젝트에서 setup을 다시 실행하면 저장된 선택을 유지합니다. 설정 조회·부분 변경 도구의 요청 형식은 [설정 프로토콜](plugins/orchestrail/references/settings.md)에 있습니다. 모델 프로필만 지원하는 호스트는 변경된 프로필을 읽기 위해 새 작업이 필요할 수 있습니다.
+
+기본 한도는 Expert 배정 3회, 전체 계획 재작성 2회입니다. 이는 **배정 횟수 한도**이며 토큰이나 청구액의 상한이 아닙니다. 사용량에는 요청 모델과 실제 관측 모델을 구분하며, 관측하지 못한 토큰·비용은 `null`로 표시합니다.
+
+모델·추론 변경은 프로필 상단의 해당 필드만 수정해 사용자 지침과 주석을 보존합니다. 안전하게 수정할 수 없는 프로필 형식은 오류를 반환하며, 수정 요청 없이 setup으로 파일을 갱신할 때도 사용자 편집과의 충돌을 보존합니다. 상태에는 작업 설명과 제한된 명령 출력이 저장됩니다. 출력의 흔한 비밀값 패턴을 가리지만 완전한 비밀정보 탐지기는 아니므로 실행 기록을 공개 저장소에 올리지 마세요.
 
 ## OpenDock
 
@@ -116,8 +130,8 @@ pnpm package
 
 `pnpm package`는 타입 검사, 번들 생성, 테스트, 패키지 검증 후 다음 파일을 만듭니다.
 
-- `dist/orchestrail-0.1.0.tar.gz`: GitHub marketplace와 플러그인
-- `dist/orchestrail-opendock-0.1.0.tar.gz`: OpenDock 제출용 패키지
+- `dist/orchestrail-0.2.0.tar.gz`: GitHub marketplace와 플러그인
+- `dist/orchestrail-opendock-0.2.0.tar.gz`: OpenDock 제출용 패키지
 - `dist/SHA256SUMS`: 파일 체크섬
 
 `plugins/orchestrail/scripts/orchestrail.mjs`는 GitHub 직접 설치에 필요하므로 생성 후 커밋에 포함합니다. CI는 Linux/macOS에서 검사하고 생성물의 누락된 갱신을 확인합니다.
@@ -127,6 +141,7 @@ pnpm package
 ```bash
 pnpm smoke:native   # Sol/Astra 모델 및 네이티브 이벤트 확인
 pnpm smoke:harness  # 배정 → 실제 모델 → 결정 → 검증 → 완료
+pnpm smoke:settings # 첫 설정 질문과 이후 자연어 설정 변경
 ```
 
 참고: [상세 설계](docs/implementation-plan.md) · [현재 구조](docs/architecture.md) · [호환성](docs/compatibility.md) · [기여 안내](CONTRIBUTING.md)

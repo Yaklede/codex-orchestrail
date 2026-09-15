@@ -6,7 +6,8 @@ import { HarnessError, HookInput } from './contracts.js';
 import { execute } from './engine.js';
 import { projectRoot, recoverLock } from './files.js';
 import { handleHook } from './hooks.js';
-import { doctor, setup, uninstall } from './install.js';
+import { configure, doctor, setup, uninstall } from './install.js';
+import { settings } from './settings.js';
 import { Store } from './store.js';
 import { VERSION } from './version.js';
 
@@ -14,7 +15,7 @@ const HELP = `Orchestrail ${VERSION} — state helper for the Codex plugin
 
 node <plugin>/scripts/orchestrail.mjs ACTION --project /path/to/repo [--session ID] [--input request.json]
 
-Actions: setup, doctor, uninstall, start, status, route, plan, assign, bind,
+Actions: setup, config, configure, doctor, uninstall, start, status, route, plan, assign, bind,
          result, evidence, verify, attempt, decision, packet, fingerprint,
          complete, revise, pause, cancel, resume, recover-lock, hook
 
@@ -35,7 +36,9 @@ async function main() {
   const store = new Store(project);
   const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   let result: unknown;
-  if (action === 'setup') result = await setup(project, pluginRoot);
+  if (action === 'setup') result = await setup(project, pluginRoot, input);
+  else if (action === 'config') result = await settings(project);
+  else if (action === 'configure') result = await configure(project, pluginRoot, input);
   else if (action === 'uninstall') result = await uninstall(project);
   else if (action === 'doctor') result = await doctor(project, pluginRoot);
   else if (action === 'recover-lock') result = await recoverLock(store.dir);
